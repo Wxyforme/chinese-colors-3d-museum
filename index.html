@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>传统古色 · 3D 博物馆</title>
+<style>
+  :root { --desk: #14120e; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", serif; background: var(--desk); color: #efe7d3; }
+  .serif { font-family: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif; }
+  .mono { font-family: "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace; }
+
+  #c3d { position: fixed; inset: 0; display: block; }
+
+  header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px;
+    background: linear-gradient(180deg, rgba(20,18,14,0.85), rgba(20,18,14,0));
+    pointer-events: none;
+  }
+  header .brand { pointer-events: auto; }
+  header .cn { font-size: 18px; font-weight: 700; letter-spacing: 0.14em; }
+  header .en { font-size: 9px; letter-spacing: 0.26em; color: rgba(239,231,211,0.5); text-transform: uppercase; }
+  .dots { display: flex; gap: 8px; pointer-events: auto; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(239,231,211,0.25); transition: transform 0.2s ease; }
+  .dot.on { transform: scale(1.3); border-color: #efe7d3; }
+
+  .hint {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 20;
+    font-size: 12px; letter-spacing: 0.14em; color: rgba(239,231,211,0.75);
+    background: rgba(20,18,14,0.6); padding: 10px 18px; border-radius: 20px;
+    border: 1px solid rgba(239,231,211,0.2); pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  #info {
+    position: fixed; left: 28px; bottom: 30px; z-index: 20; width: 320px;
+    background: rgba(20,18,14,0.82); border: 1px solid rgba(239,231,211,0.18);
+    border-radius: 12px; padding: 18px 20px; backdrop-filter: blur(8px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    opacity: 0; transform: translateY(12px); pointer-events: none;
+  }
+  #info.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #info .sw { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  #info .sw .chip { width: 34px; height: 34px; border-radius: 8px; }
+  #info .sw .nm { font-size: 22px; font-weight: 700; letter-spacing: 0.08em; }
+  #info .sw .hex { font-size: 11px; letter-spacing: 0.08em; color: rgba(239,231,211,0.6); }
+  #info .obj { font-size: 12px; color: rgba(239,231,211,0.85); line-height: 1.6; }
+  #info .poem { margin-top: 10px; font-size: 13px; line-height: 1.7; color: rgba(239,231,211,0.9); }
+  #info .poem .au { font-size: 11px; color: rgba(239,231,211,0.55); }
+
+  #loading {
+    position: fixed; inset: 0; z-index: 40; background: var(--desk);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    transition: opacity 0.6s ease;
+  }
+  #loading .t { font-size: 16px; letter-spacing: 0.2em; }
+  #loading .p { font-size: 12px; letter-spacing: 0.1em; color: rgba(239,231,211,0.55); }
+  #loading.hide { opacity: 0; pointer-events: none; }
+
+  /* ============================================================
+     卷轴详解覆盖层：在展厅里点展品后展开该色的卷轴段。
+     所有选择器都挂在 #scrollview 下做命名空间隔离，
+     否则会和 3D 页已有的 header / .dot / body 样式互相覆盖。
+     ============================================================ */
+  #scrollview {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    --paper: #e8ddc3; --ink: #3a3323; --ink-soft: #7c735c; --segw: 88vw;
+    background: radial-gradient(120% 90% at 50% 0%, #1c1913 0%, #14120e 55%);
+    color: var(--ink);
+  }
+  #scrollview.on { display: block; }
+
+  #scrollview .sv-head {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 30px;
+    background: linear-gradient(180deg, rgba(20,18,14,0.9), rgba(20,18,14,0));
+    pointer-events: none;
+  }
+  #scrollview .sv-head .cn { font-size: 19px; font-weight: 700; letter-spacing: 0.16em; color: #efe7d3; }
+  #scrollview .sv-head .en { font-size: 9px; letter-spacing: 0.28em; color: rgba(239,231,211,0.5); text-transform: uppercase; }
+  #scrollview .sv-dots { display: flex; gap: 9px; pointer-events: auto; }
+  #scrollview .sv-dot {
+    width: 13px; height: 13px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgba(239,231,211,0.25); background: #3a352b; transition: transform 0.2s ease;
+  }
+  #scrollview .sv-dot.on { transform: scale(1.45); border-color: #efe7d3; }
+
+  #scrollview .stage {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 7vh 2vw 6vh;
+  }
+  #scrollview .roller {
+    position: absolute; top: 7vh; height: 84vh; width: 30px; z-index: 12; border-radius: 15px;
+    background: linear-gradient(90deg, #3f2d18 0%, #b98a52 30%, #d9b277 50%, #9a703d 72%, #3a2a15 100%);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.55), inset 0 0 4px rgba(255,255,255,0.15);
+  }
+  #scrollview .roller::before, #scrollview .roller::after {
+    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+    width: 44px; height: 22px; border-radius: 11px;
+    background: radial-gradient(circle at 40% 32%, #e2c084, #8a6436 68%, #5c3f1e);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+  }
+  #scrollview .roller::before { top: -12px; }
+  #scrollview .roller::after { bottom: -12px; }
+  #scrollview .roller.left { left: 1.5vw; }
+  #scrollview .roller.right { right: 1.5vw; }
+  /* 展开动效：每次打开重放一次 */
+  #scrollview.unrolling .viewport { animation: svReveal 1.15s cubic-bezier(0.22,0.61,0.36,1) both; }
+  #scrollview.unrolling .roller.left { animation: svRollL 1.25s cubic-bezier(0.22,0.61,0.36,1) both; }
+  #scrollview.unrolling .roller.right { animation: svRollR 1.25s cubic-bezier(0.22,0.61,0.36,1) both; }
+
+  #scrollview .viewport {
+    position: relative; height: 84vh; width: var(--segw); max-width: 96vw;
+    background-color: var(--paper);
+    background-image: url('assets/paper_texture.png');
+    background-size: cover; background-blend-mode: multiply;
+    border-radius: 4px; overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    clip-path: inset(0 50% 0 50%);
+  }
+  #scrollview .viewport::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    box-shadow: inset 0 0 60px rgba(120,90,40,0.28), inset 0 0 6px rgba(120,90,40,0.3);
+  }
+  #scrollview .scroll {
+    position: absolute; inset: 0; display: flex;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory; scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  #scrollview .scroll::-webkit-scrollbar { display: none; }
+  #scrollview .seg { flex: 0 0 var(--segw); height: 100%; scroll-snap-align: start; position: relative; }
+  #scrollview .seg.intro, #scrollview .seg.outro {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; gap: 22px; padding: 0 8vw;
+  }
+  #scrollview .seg.intro .title { font-size: clamp(34px, 5vw, 60px); font-weight: 800; letter-spacing: 0.12em; color: var(--ink); line-height: 1.35; }
+  #scrollview .seg.intro .sub { font-size: 11px; letter-spacing: 0.4em; color: var(--ink-soft); }
+  #scrollview .strip { display: flex; gap: 3px; }
+  #scrollview .strip i { width: 38px; height: 52px; border-radius: 3px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+  #scrollview .seg.intro .hint { font-size: 11px; letter-spacing: 0.3em; color: var(--ink-soft); }
+  #scrollview .seg.outro .ot { font-size: 20px; letter-spacing: 0.2em; color: var(--ink); margin-bottom: 6px; font-weight: 700; }
+  #scrollview .seg.outro .ol { max-width: 600px; font-size: 12.5px; line-height: 2.1; color: #5a513c; text-align: left; }
+
+  #scrollview .seg.color { display: flex; flex-direction: column; }
+  #scrollview .banner {
+    flex: 0 0 26%; min-height: 150px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 44px; position: relative; overflow: hidden;
+  }
+  #scrollview .banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(0,0,0,0.06)); }
+  #scrollview .banner .bn { font-size: clamp(48px, 7vw, 96px); font-weight: 800; color: var(--on); position: relative; z-index: 1; line-height: 0.9; }
+  #scrollview .banner .bd { text-align: right; position: relative; z-index: 1; }
+  #scrollview .banner .bd .hex { font-size: 21px; color: var(--on); }
+  #scrollview .banner .bd .rgb { font-size: 11px; color: var(--on); opacity: 0.7; margin-top: 5px; letter-spacing: 0.12em; }
+
+  #scrollview .seg-body { flex: 1; display: flex; flex-direction: column; padding: 22px 44px 20px; min-height: 0; }
+  #scrollview .seg-mid { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 18px; flex: 1; min-height: 0; }
+  #scrollview .card {
+    background: rgba(255,255,255,0.42); border: 1px solid rgba(90,75,45,0.22); border-radius: 10px;
+    padding: 14px; display: flex; flex-direction: column; min-height: 0;
+  }
+  #scrollview .card-head { font-size: 10px; letter-spacing: 0.26em; color: var(--ink-soft); margin-bottom: 11px; padding-bottom: 8px; border-bottom: 1px solid rgba(90,75,45,0.2); }
+  #scrollview .imgw {
+    flex: 1; background: #fff; border-radius: 7px; overflow: hidden; min-height: 0;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,0.16);
+  }
+  #scrollview .imgw img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #scrollview .cap { margin-top: 11px; }
+  #scrollview .cap .obj { font-size: 12.5px; font-weight: 700; line-height: 1.5; color: var(--ink); }
+  #scrollview .cap .muse { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+  #scrollview .cap .src { margin-top: 7px; padding-top: 7px; border-top: 1px dashed rgba(90,75,45,0.3); font-size: 9.5px; color: #8a7d63; line-height: 1.5; }
+  #scrollview .poem-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 11px; }
+  #scrollview .poem-wrap .pt { writing-mode: vertical-rl; text-orientation: upright; font-size: 20px; letter-spacing: 0.24em; line-height: 1.5; color: var(--ink); }
+  #scrollview .poem-wrap .au { writing-mode: vertical-rl; font-size: 10.5px; color: var(--ink-soft); letter-spacing: 0.14em; }
+  #scrollview .seg-foot { margin-top: 18px; display: flex; gap: 36px; align-items: flex-start; }
+  #scrollview .seg-foot .meaning { font-size: 13.5px; line-height: 1.95; color: #4a4230; max-width: 540px; }
+  #scrollview .seg-foot .meta { font-size: 11.5px; line-height: 1.85; color: var(--ink-soft); }
+  #scrollview .seg-foot .meta b { color: var(--ink); letter-spacing: 0.04em; }
+
+  #scrollview .controls { position: absolute; bottom: 24px; right: 2.6vw; z-index: 30; display: flex; gap: 10px; }
+  #scrollview .btn {
+    width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgba(239,231,211,0.28); background: rgba(20,18,14,0.55);
+    color: #efe7d3; font-size: 17px; line-height: 1; font-family: inherit;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  #scrollview .btn:hover { background: rgba(20,18,14,0.9); transform: translateY(-2px); }
+  #scrollview .pbar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; z-index: 30; background: rgba(255,255,255,0.07); }
+  #scrollview .pbar i { display: block; height: 100%; width: 0; background: #d9b277; transition: width 0.25s ease; }
+
+  /* 返回展厅 */
+  #back3d {
+    position: absolute; bottom: 24px; left: 2.6vw; z-index: 31;
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: 22px; cursor: pointer; font-family: inherit;
+    border: 1px solid rgba(239,231,211,0.28); background: rgba(20,18,14,0.62);
+    color: #efe7d3; font-size: 13px; letter-spacing: 0.12em;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  #back3d:hover { background: rgba(20,18,14,0.92); transform: translateY(-2px); }
+
+  /* 信息面板里的「展开卷轴」按钮 */
+  #info .more {
+    margin-top: 14px; width: 100%; padding: 10px 12px; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 12.5px; letter-spacing: 0.1em;
+    border: 1px solid rgba(239,231,211,0.35); background: rgba(239,231,211,0.1);
+    color: #efe7d3; transition: background 0.2s ease;
+  }
+  #info .more:hover { background: rgba(239,231,211,0.22); }
+
+  @media (max-width: 900px) {
+    #scrollview { --segw: 92vw; }
+    #scrollview .seg-mid { grid-template-columns: 1fr; gap: 10px; overflow-y: auto; }
+    #scrollview .seg-body { padding: 14px 20px 16px; }
+    #scrollview .banner { padding: 0 24px; }
+    #scrollview .imgw { min-height: 120px; }
+    #scrollview .seg-foot { flex-direction: column; gap: 10px; }
+  }
+  @keyframes svReveal { to { clip-path: inset(0 0 0 0); } }
+  @keyframes svRollL { from { left: 50%; margin-left: -15px; } to { left: 1.5vw; margin-left: 0; } }
+  @keyframes svRollR { from { right: 50%; margin-right: -15px; } to { right: 1.5vw; margin-right: 0; } }
+</style>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+
+<header>
+  <div class="brand">
+    <div class="cn serif">传统古色 · 3D 博物馆</div>
+    <div class="en mono">Traditional Chinese Colors · 3D Museum</div>
+  </div>
+  <div class="dots" id="dots"></div>
+</header>
+
+<div class="hint" id="hint">点击画面进入漫游 · WASD 移动 · 鼠标转视角 · ESC 退出</div>
+<div id="info"></div>
+<div id="loading"><div class="t serif">正在布展 · 加载八色藏品</div><div class="p mono" id="lp">0 / 8</div></div>
+
+<!-- 卷轴详解覆盖层：默认隐藏，点展品后展开到该色的卷轴段 -->
+<div id="scrollview" role="dialog" aria-modal="true" aria-label="色彩卷轴详解">
+  <div class="sv-head">
+    <div class="brand">
+      <div class="cn serif">传统古色 · 色谱长卷</div>
+      <div class="en mono">A HANDSCROLL OF EIGHT CHINESE COLORS</div>
+    </div>
+    <div class="sv-dots" id="svDots"></div>
+  </div>
+
+  <div class="stage">
+    <div class="roller left"></div>
+    <div class="roller right"></div>
+    <div class="viewport">
+      <div class="scroll" id="svScroll"></div>
+    </div>
+  </div>
+
+  <button id="back3d" type="button">← 返回展厅 <span class="mono" style="opacity:.55">ESC</span></button>
+
+  <div class="controls">
+    <button class="btn" id="svPrev" type="button" aria-label="上一段">‹</button>
+    <button class="btn" id="svNext" type="button" aria-label="下一段">›</button>
+  </div>
+  <div class="pbar"><i id="svFill"></i></div>
+</div>
+
+<!-- three.js 已本地化到 assets/vendor/three/，不再依赖外网 CDN（原先依赖 cdn.jsdelivr.net，被墙/重置时整页卡在黑屏加载页） -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three/build/three.module.js",
+    "three/addons/": "./assets/vendor/three/examples/jsm/"
+  }
+}
+</script>
+
+<script>
+/* 看门狗：模块脚本若因资源缺失 / CORS / 解析失败而没能启动，给出可读报错，而不是永久黑屏。
+   模块脚本成功加载 three.js 后会调用 window.__museumBooted()。 */
+window.__museumState = { booted: false, failed: [] };
+window.__museumBooted = function () { window.__museumState.booted = true; };
+window.__museumFail = function (html) {
+  var p = document.getElementById('lp');
+  if (p) p.innerHTML = '<span style="color:#e8a08c;line-height:1.9">' + html + '</span>';
+};
+window.addEventListener('error', function (ev) {
+  var t = ev.target;
+  if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+    // 内联 module 脚本没有 src，退回用 ev.filename
+    var url = String(t.src || t.href || ev.filename || '').trim();
+    window.__museumFail('资源加载失败：' + (url ? '<br>' + url : '') +
+      '<br>请确认 assets/vendor/three/ 已随页面一起部署');
+  }
+}, true);
+setTimeout(function () {
+  if (!window.__museumState.booted) {
+    window.__museumFail('3D 引擎未能启动<br>assets/vendor/three/ 缺失或被拦截，请检查控制台');
+  }
+}, 15000);
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+// 三个 import 都成功解析到本地文件，撤下看门狗
+window.__museumBooted();
+
+// 展品数据。字段比展厅本身需要的多：rgb/light/origin/source/meaning/muse/museNo
+// 是「卷轴详解」覆盖层要用的考据内容，展厅只用到 id/name/hex/obj/muse/poem/poet。
+const COLORS = [
+  { id:'jilan', name:'霁蓝', hex:'#3C4654', rgb:'60 · 70 · 84', light:false,
+    origin:'《南窑笔记》、许之衡《饮流斋说瓷》、刘子芬《竹园陶说》', source:'《中国传统色：故宫里的色彩美学》',
+    meaning:'取雨过天青、雨霁澄空的天色，是明清皇家专属正色，多用于官窑霁蓝釉瓷器、皇家祭祀礼器、宫廷御用织锦，色泽沉敛深邃、纯净无杂。',
+    obj:'祭蓝釉暗花云龙纹盘', muse:'明宣德 · 故宫博物院藏', museNo:'新00109447',
+    poem:'晴空一鹤排云上，便引诗情到碧霄', poet:'唐 · 刘禹锡《秋词》' },
+  { id:'yuebai', name:'月白', hex:'#D6ECF0', rgb:'214 · 236 · 240', light:true,
+    origin:'《清代内务府造办处活计档》（《营造法式》未见"月白"色名，待核实）', source:'中国传统色谱',
+    meaning:'取自月夜朦胧浅淡的天光，非纯白、非浅蓝，清透素雅。多用于宋代侍女纱衣、古建筑斗拱彩绘、明清素色绢帛、官窑浅色釉瓷，是中式极简清雅代表色。',
+    obj:'月白缎织彩百花飞蝶袷袍', muse:'清乾隆 · 故宫博物院藏', museNo:'故00042137',
+    poem:'床前明月光，疑是地上霜', poet:'唐 · 李白《静夜思》' },
+  { id:'songhua', name:'松花', hex:'#BCE672', rgb:'188 · 230 · 114', light:true,
+    origin:'《本草纲目·松》草木染记载（"松花配桃红"见《红楼梦》，出处待核实）', source:'中国传统色谱',
+    meaning:'取自初春松花初绽的嫩黄绿色，温润鲜活、不艳不娇。古代多用于文人布衣、书画绢底、宫廷素雅配饰、漆器浅纹填色，是极具生机的中式草木古色。',
+    obj:'松石绿釉镂空花篮（相近器）', muse:'清乾隆 · 故宫博物院藏', museNo:'故00154491',
+    poem:'松花酿酒，春水煎茶', poet:'元 · 张可久《人月圆·山中书事》' },
+  { id:'shiqing', name:'石青', hex:'#1E3C72', rgb:'30 · 60 · 114', light:false,
+    origin:'《天工开物·丹青》（石青详载见"珠玉卷"）；石青即蓝铜矿矿物颜料', source:'保留矿物实际呈色（蓝铜矿深蓝）',
+    meaning:'取自天然石青矿物研磨而成的正色，色泽厚重沉稳、青绿偏蓝。古代多用于文武官员官服、古建筑琉璃瓦、壁画彩绘、书画矿物颜料，是中式庄重典雅的经典正色。',
+    obj:'石青色云纹缎地平金蟒补袷朝服', muse:'清晚期 · 故宫博物院藏', museNo:'故00044298',
+    poem:'曲径通幽处，禅房花木深', poet:'唐 · 常建《题破山寺后禅院》' },
+  { id:'ouhe', name:'藕合', hex:'#E4C6D0', rgb:'228 · 198 · 208', light:true,
+    origin:'《簪花仕女图》色彩考据、《清代服饰色彩图谱》（出处待核实）', source:'中国传统色谱 · 藕荷色',
+    meaning:'取自莲藕内皮的浅粉紫调，温润柔和、淡雅温婉，无艳丽俗气。多用于古代仕女襦裙、闺阁纱帘、团扇绢面、闺居陈设织物，是中式婉约柔美的代表色。',
+    obj:'藕荷色缎绣牡丹团寿纹袷衣', muse:'清光绪 · 故宫博物院藏', museNo:'故00223517',
+    poem:'自在飞花轻似梦，无边丝雨细如愁', poet:'宋 · 秦观《浣溪沙》' },
+  { id:'canghuang', name:'苍黄', hex:'#A29B7C', rgb:'162 · 155 · 124', light:true,
+    origin:'《墨子·所染》"染于苍则苍，染于黄则黄"', source:'中国传统色谱',
+    meaning:'取苍天旷野、秋土苍茫的黄褐古调，质朴厚重、古朴沉稳。古代多用于古风帛书、麻布器物、古陶素胎、山野郊居陈设，自带岁月沉淀的复古质感。',
+    obj:'马王堆帛书《老子》甲本', muse:'西汉 · 湖南博物院藏', museNo:'出土于马王堆三号汉墓',
+    poem:'大漠孤烟直，长河落日圆', poet:'唐 · 王维《使至塞上》' },
+  { id:'dailan', name:'黛蓝', hex:'#425066', rgb:'66 · 80 · 102', light:false,
+    origin:'《楚辞·招魂》注、《古代妆饰色彩考》（"黛，画眉也"见《说文》，待核实）', source:'中国传统色谱',
+    meaning:'取自古女子画眉所用黛石的深蓝墨色，幽深静谧、清冷凝重。多用于古画远山晕染、闺阁黛眉、深色织锦、古瓷墨蓝釉色，是中式写意山水的核心配色。',
+    obj:'青花缠枝牡丹云龙纹罐', muse:'元 · 故宫博物院藏', museNo:'新00196642',
+    poem:'江流天地外，山色有无中', poet:'唐 · 王维《汉江临眺》' },
+  { id:'xinghuang', name:'杏黄', hex:'#FFA631', rgb:'255 · 166 · 49', light:false,
+    origin:'《花木考·杏谱》、《明代宫廷色彩规制》（出处待核实）', source:'中国传统色谱',
+    meaning:'取自初春杏树花开的浅嫩黄色，温润儒雅、清亮不张扬，区别于明黄帝王色。古代多用于文人儒衫、书院陈设、杏花纹样织物、浅釉瓷品，是中式文人风骨的代表色彩。',
+    obj:'杏黄色缎缀绣八团云龙女夹龙袍', muse:'清乾隆 · 故宫博物院藏', museNo:'故00051104',
+    poem:'沾衣欲湿杏花雨，吹面不寒杨柳风', poet:'宋 · 志南《绝句》' }
+];
+
+const canvas = document.getElementById('c3d');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#1a1712');
+
+const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, 0.1, 120);
+camera.position.set(0, 1.7, 7);
+
+/* ============ 博物馆建筑 ============ */
+const MUSE_R = 14;      // 外墙半径
+const WALL_H = 4.6;     // 墙高
+const STAND_R = 10.6;   // 展台半径
+const STAND_TOP = 1.375; // 展台立柱顶面高度（立柱 y=0.85、高 1.05 → 顶面 1.375）
+const DISPLAY_SIZE = 1.15; // 每件藏品归一化后的最大边长
+
+/* 地板（浅色大理石） */
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(MUSE_R, 96),
+  new THREE.MeshStandardMaterial({ color:'#e3dbc9', roughness:0.75 })
+);
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true;
+scene.add(floor);
+// 地板中心装饰环
+const floorRing = new THREE.Mesh(
+  new THREE.RingGeometry(2.2, 2.3, 96),
+  new THREE.MeshBasicMaterial({ color:'#c9bfa8', side:THREE.DoubleSide })
+);
+floorRing.rotation.x = -Math.PI/2; floorRing.position.y = 0.01;
+scene.add(floorRing);
+
+/* 天花板 */
+const ceil = new THREE.Mesh(
+  new THREE.CircleGeometry(MUSE_R, 96),
+  // 加一点自发光，让顶棚读起来像被天光照亮的白色屋顶，而不是黑洞
+  new THREE.MeshStandardMaterial({ color:'#e9e2d2', roughness:0.9, emissive:'#cfc6b2', emissiveIntensity:0.32 })
+);
+ceil.rotation.x = Math.PI/2; ceil.position.y = WALL_H;
+scene.add(ceil);
+// 中央天窗灯
+const skylight = new THREE.Mesh(
+  new THREE.CircleGeometry(2.4, 64),
+  new THREE.MeshBasicMaterial({ color:'#fff6e0' })
+);
+skylight.rotation.x = Math.PI/2; skylight.position.y = WALL_H - 0.01;
+scene.add(skylight);
+
+/* 八边形外墙（每段为该色） */
+const segW = 2 * MUSE_R * Math.tan(Math.PI/8);
+COLORS.forEach((c, i) => {
+  const a = (i / 8) * Math.PI * 2 + Math.PI/8;
+  const wall = new THREE.Mesh(
+    new THREE.PlaneGeometry(segW + 0.15, WALL_H),
+    new THREE.MeshStandardMaterial({ color:c.hex, roughness:0.85 })
+  );
+  wall.position.set(Math.cos(a)*MUSE_R, WALL_H/2, Math.sin(a)*MUSE_R);
+  wall.lookAt(0, WALL_H/2, 0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  // 踢脚线
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(segW + 0.15, 0.22, 0.12),
+    new THREE.MeshStandardMaterial({ color:'#6b6151', roughness:0.6 })
+  );
+  base.position.set(Math.cos(a)*MUSE_R, 0.11, Math.sin(a)*MUSE_R);
+  base.lookAt(0, 0.11, 0);
+  scene.add(base);
+});
+
+/* 中央信息台 */
+const center = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.5, 1.7, 0.95, 48),
+  new THREE.MeshStandardMaterial({ color:'#3a332a', roughness:0.55 })
+);
+center.position.y = 0.475; center.castShadow = center.receiveShadow = true;
+scene.add(center);
+const centerTop = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.5, 1.5, 0.06, 48),
+  new THREE.MeshStandardMaterial({ color:'#e9e2d2', roughness:0.4 })
+);
+centerTop.position.y = 0.97;
+scene.add(centerTop);
+
+/* ============ 灯光 ============ */
+// 半球光的「地面色」原来用的 #2a2418 几乎全黑，导致法线朝下的天花板只能吃到这点暗色，
+// 整个顶棚糊成黑幕。改成浅暖灰模拟大理石地板的反弹光。
+scene.add(new THREE.HemisphereLight('#fff3dd', '#9a907a', 0.95));
+// 基础环境光，托住墙面和顶棚的暗部
+scene.add(new THREE.AmbientLight('#5c5344', 0.5));
+const key = new THREE.DirectionalLight('#fff0d8', 1.25);
+key.position.set(8, 14, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -20; key.shadow.camera.right = 20;
+key.shadow.camera.top = 20; key.shadow.camera.bottom = -20;
+key.shadow.camera.far = 60;
+scene.add(key);
+// 中央天窗光：扩大照射范围、放缓衰减，让光能铺满整个顶棚
+const topLight = new THREE.PointLight('#fff4dc', 30, 70, 1.25);
+topLight.position.set(0, WALL_H - 0.5, 0);
+scene.add(topLight);
+
+/* ============ 展台 ============ */
+const exhibits = [];
+const loader = new GLTFLoader();
+const texLoader = new THREE.TextureLoader();
+const MODEL_IDS = ['jilan', 'songhua', 'dailan', 'canghuang'];
+let loaded = 0;
+
+COLORS.forEach((c, i) => {
+  const a = (i / COLORS.length) * Math.PI * 2;
+  const x = Math.cos(a) * STAND_R, z = Math.sin(a) * STAND_R;
+  const grp = new THREE.Group();
+  grp.position.set(x, 0, z);
+  grp.lookAt(0, 0, 0);
+
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.05, 1.25, 0.32, 48),
+    new THREE.MeshStandardMaterial({ color:'#efe9db', roughness:0.5 })
+  );
+  base.position.y = 0.16; base.castShadow = base.receiveShadow = true;
+  grp.add(base);
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(1.3, 1.42, 48),
+    new THREE.MeshBasicMaterial({ color:c.hex, side:THREE.DoubleSide })
+  );
+  halo.rotation.x = -Math.PI/2; halo.position.y = 0.02;
+  grp.add(halo);
+  // 器物（有 GLB 的）立在细立柱上；袍服体量大，直接站在白色展台面上，
+  // 否则一件大袍子顶在细杆上会变成「蘑菇插杆」
+  const isGarment = !MODEL_IDS.includes(c.id);
+  if (!isGarment) {
+    const pillar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.18, 1.05, 32),
+      new THREE.MeshStandardMaterial({ color:'#5a5245', roughness:0.5 })
+    );
+    pillar.position.y = 0.85; pillar.castShadow = true;
+    grp.add(pillar);
+  }
+
+  // 展台信息牌（色名，Sprite 用 canvas）
+  const sprite = makeLabel(c.name);
+  sprite.position.set(0, 0.55, 1.15);
+  grp.add(sprite);
+
+  // 氛围光
+  const pl = new THREE.PointLight(c.hex, 1.4, 10, 2);
+  pl.position.set(0, 2.6, 0.5);
+  grp.add(pl);
+
+  scene.add(grp);
+
+  // 袍服站在展台面（0.32）上，器物站在立柱顶面（STAND_TOP）上
+  const holderY = isGarment ? 0.32 : STAND_TOP;
+  const holder = new THREE.Group();
+  holder.position.set(x, holderY, z);
+  holder.lookAt(0, holderY, 0);
+  scene.add(holder);
+
+  exhibits.push({ c, i, grp, holder, a, x, z });
+});
+
+/* canvas 文字标签 */
+function makeLabel(text) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 96;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 52px "Songti SC","SimSun",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(20,18,14,0.85)';
+  ctx.fillRect(0, 8, 256, 80);
+  ctx.fillStyle = '#f2ead6';
+  ctx.fillText(text, 128, 52);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest:false }));
+  sp.scale.set(1.5, 0.56, 1);
+  return sp;
+}
+
+/* ============ 加载模型 ============ */
+const lpEl = document.getElementById('lp');
+const loadingEl = document.getElementById('loading');
+
+// 统一收口：每件藏品无论成功或失败都必须走 tick，
+// 否则 loaded 永远到不了 8，加载页会一直卡在那里（黑屏）。
+function tick(e, ok) {
+  if (!ok) window.__museumState.failed.push(e.c.name);
+  loaded++;
+  lpEl.textContent = loaded + ' / ' + COLORS.length;
+  if (loaded >= COLORS.length) {
+    if (window.__museumState.failed.length) {
+      console.warn('[博物馆] 以下藏品 3D 模型加载失败，已用占位展品代替：'
+        + window.__museumState.failed.join('、'));
+    }
+    setTimeout(() => loadingEl.classList.add('hide'), 400);
+  }
+}
+
+// 没有 GLB 时，用程序化建模做一件该色的清式袍服。
+// 局部坐标约定：y = 0 是下摆底边，模型朝 +z 为正面（挂点 lookAt 中心，故正面朝向观众）。
+function buildGarment(hex) {
+  const g = new THREE.Group();
+  const cloth = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.72, metalness: 0.02, side: THREE.DoubleSide });
+  // 领口用同色系深色、补子用织金，保持「一色一品」的展陈调性
+  const deep = '#' + new THREE.Color(hex).multiplyScalar(0.5).getHexString();
+  const trim = new THREE.MeshStandardMaterial({ color: deep, roughness: 0.45, metalness: 0.12 });
+  const gold = new THREE.MeshStandardMaterial({ color: '#c8a55e', roughness: 0.38, metalness: 0.5 });
+
+  // 衣身：用旋转体拉出「上窄下阔、肩部收圆」的整体剪影，
+  // 比叠圆柱少了一圈台阶，更像一件袍子而不是灯罩
+  const FLAT = 0.62;   // 前后压扁，做出衣物的厚度感
+  const profile = [
+    [0.40, 0.00],   // 下摆
+    [0.395, 0.14],
+    [0.365, 0.38],
+    [0.325, 0.62],
+    [0.30, 0.82],
+    [0.288, 0.92],  // 肩线：保持宽度，别收成圆顶
+    [0.268, 0.985],
+    [0.165, 1.015], // 快速收到领口
+    [0.105, 1.028],
+    [0.00, 1.032],  // 封顶，避免从领口看进去是空的
+  ].map(p => new THREE.Vector2(p[0], p[1]));
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(profile, 40), cloth);
+  torso.scale.z = FLAT;
+  g.add(torso);
+
+  // 立领
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.026, 10, 28), trim);
+  collar.rotation.x = Math.PI / 2;   // 环面放平（局部 y → 世界 z）
+  collar.position.y = 1.0;
+  collar.scale.y = FLAT;
+  g.add(collar);
+
+  // 两袖：清式，袖口（外端）比肩部宽，横向外展并微微下垂
+  [1, -1].forEach(s => {
+    const arm = new THREE.Group();
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.105, 0.38, 24), cloth);
+    sleeve.rotation.z = -s * Math.PI / 2;  // 轴转到 ±x，粗端（半径 0.15）指向袖口外侧
+    sleeve.position.x = s * 0.19;
+    arm.add(sleeve);
+    arm.position.set(s * 0.21, 0.885, 0);
+    arm.rotation.z = -s * 0.10;            // 袖口微微下垂
+    arm.scale.z = 0.78;
+    g.add(arm);
+  });
+
+  // 胸前补子：贴到衣身该高度处的曲面上
+  const badge = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.02), gold);
+  badge.position.set(0, 0.72, 0.312 * FLAT + 0.012);
+  g.add(badge);
+
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+// 把任意模型归一化后「底面对齐」摆到展台面上
+function placeOnStand(obj) {
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const scale = DISPLAY_SIZE / maxDim;
+  obj.scale.setScalar(scale);
+  // 水平居中；垂直方向对齐「包围盒底面」而不是几何中心 —— 原实现用中心对齐，
+  // 只有 y 向恰好是最大尺寸的器物（瓶/盘/篮）才碰巧落在台面上，
+  // 扁平的帛书最大尺寸在长度方向，于是被顶到半空悬着。
+  obj.position.set(
+    -center.x * scale,
+    -box.min.y * scale + 0.008,   // 8mm 抬升，避免与立柱顶面 z-fighting
+    -center.z * scale
+  );
+  return obj;
+}
+
+function loadModel(e) {
+  if (!MODEL_IDS.includes(e.c.id)) {
+    e.holder.add(placeOnStand(buildGarment(e.c.hex)));
+    tick(e, true);
+    return;
+  }
+  loader.load(`assets/models/${e.c.id}.glb`, (gltf) => {
+    const m = gltf.scene;
+    placeOnStand(m);
+    m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    e.holder.add(m);
+    tick(e, true);
+  }, undefined, (err) => {
+    // 原来是空回调 () => {}，模型一旦加载失败 loaded 就不再增加，加载页永远不消失
+    console.warn(`[博物馆] ${e.c.id}.glb 加载失败，改用程序化袍服：`, err);
+    e.holder.add(placeOnStand(buildGarment(e.c.hex)));
+    tick(e, false);
+  });
+}
+exhibits.forEach(loadModel);
+
+// 最终保险：即使模型再慢或彻底失败，30 秒后也一定放人进展厅
+setTimeout(() => loadingEl.classList.add('hide'), 30000);
+
+/* ============ 导航 ============ */
+const dotsBox = document.getElementById('dots');
+COLORS.forEach((c, i) => {
+  const d = document.createElement('button');
+  d.className = 'dot'; d.style.background = c.hex; d.title = c.name;
+  d.addEventListener('click', () => teleport(i));
+  dotsBox.appendChild(d);
+});
+const allDots = dotsBox.querySelectorAll('.dot');
+
+function teleport(i) {
+  const e = exhibits[i];
+  camera.position.set(Math.cos(e.a) * (STAND_R - 2.4), 1.7, Math.sin(e.a) * (STAND_R - 2.4));
+  camera.lookAt(e.x, 1.4, e.z);
+  showInfo(i);
+  allDots.forEach((d, k) => d.classList.toggle('on', k === i));
+}
+
+/* ============ 漫游（修复：直接用 moveForward/moveRight） ============ */
+const controls = new PointerLockControls(camera, document.body);
+const hint = document.getElementById('hint');
+const dir = { f:0, s:0 };
+let currentIdx = -1;
+
+// 必须挂在 document 上：指针锁定期间浏览器把鼠标事件派发给「被锁定的元素」
+// （这里 lock() 锁的是 document.body），挂在 canvas 上收不到漫游中的点击。
+document.addEventListener('click', (ev) => {
+  const t = ev.target;
+  // 卷轴覆盖层里的点击（含刚点过的「返回展厅」）不该顺带把指针锁回展厅；
+  // 顶部导航色点和信息面板按钮各自有自己的点击意图，也不抢
+  if (t.closest && t.closest('#scrollview, header, #info .more')) return;
+  if (!controls.isLocked) { controls.lock(); return; }
+  // 漫游中：正注视着某件展品（信息面板已弹出）时点击 = 展开它的卷轴详解
+  if (currentIdx >= 0) openScroll(currentIdx);
+});
+controls.addEventListener('lock', () => { hint.style.opacity = 0; });
+controls.addEventListener('unlock', () => { hint.style.opacity = 1; });
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyW') dir.f = 1; if (e.code === 'KeyS') dir.f = -1;
+  if (e.code === 'KeyA') dir.s = -1; if (e.code === 'KeyD') dir.s = 1;
+});
+document.addEventListener('keyup', (e) => {
+  if (e.code === 'KeyW' || e.code === 'KeyS') dir.f = 0;
+  if (e.code === 'KeyA' || e.code === 'KeyD') dir.s = 0;
+});
+
+const info = document.getElementById('info');
+function showInfo(i) {
+  const c = COLORS[i];
+  info.innerHTML = `
+    <div class="sw"><span class="chip" style="background:${c.hex}"></span>
+      <span><span class="nm serif">${c.name}</span><br><span class="hex mono">${c.hex}</span></span></div>
+    <div class="obj">${c.obj} · ${c.muse}</div>
+    <div class="poem serif">${c.poem}<br><span class="au">${c.poet}</span></div>
+    <button class="more" type="button" data-i="${i}">展开卷轴 · 查看详解 →</button>`;
+  info.classList.add('show');
+}
+// 面板每次 showInfo 都会重建，所以用事件委托，别逐次绑定
+info.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.more');
+  if (b) openScroll(Number(b.dataset.i));
+});
+function proximity() {
+  let best = -1, bd = 3.6;
+  exhibits.forEach((e, i) => {
+    const dx = camera.position.x - e.x, dz = camera.position.z - e.z;
+    const d = Math.sqrt(dx*dx + dz*dz);
+    if (d < bd) { bd = d; best = i; }
+  });
+  if (best !== currentIdx) {
+    currentIdx = best;
+    if (best >= 0) { showInfo(best); allDots.forEach((d, k) => d.classList.toggle('on', k === best)); }
+    else info.classList.remove('show');
+  }
+}
+
+/* ============ 卷轴详解覆盖层 ============ */
+const svEl     = document.getElementById('scrollview');
+const svScroll = document.getElementById('svScroll');
+const svDots   = document.getElementById('svDots');
+const svFill   = document.getElementById('svFill');
+const SV_TOTAL = COLORS.length + 2;   // 引首 + 8 色卷 + 卷末
+let svCur = 0;
+
+function svIntro() {
+  const s = document.createElement('section');
+  s.className = 'seg intro';
+  const strip = COLORS.map(c => `<i style="background:${c.hex}"></i>`).join('');
+  s.innerHTML = `
+    <div class="title serif">传统古色<br>色谱长卷</div>
+    <div class="sub mono">A HANDSCROLL OF EIGHT CHINESE COLORS</div>
+    <div class="strip">${strip}</div>
+    <div class="hint mono">← 横向滑动 / 拖动展开 →</div>`;
+  return s;
+}
+function svOutro() {
+  const s = document.createElement('section');
+  s.className = 'seg outro';
+  s.innerHTML = `
+    <div class="ot serif">卷 末 · 考据说明</div>
+    <div class="ol">
+      ① 传统色无唯一权威 RGB，色值参考《中国传统色：故宫里的色彩美学》与「中国传统色谱」，个别保留矿物实际呈色（石青·蓝铜矿）；<br>
+      ② 古籍出处已逐条核对校正，存疑处标注"待核实"；<br>
+      ③ 文物为真实馆藏实拍：故宫博物院 7 件、湖南博物院 1 件（马王堆帛书），图片版权归馆方，仅供学习展示、非商用；<br>
+      ④ 主视觉由 AI 生成（人机共创），诗词均出自古人原作，署名标注出处。
+    </div>`;
+  return s;
+}
+function svColorSeg(c) {
+  const on = c.light ? '#2b2417' : '#ffffff';
+  const s = document.createElement('section');
+  s.className = 'seg color';
+  const srcLine = c.id === 'canghuang'
+    ? '图片来源：湖南博物院（hnmuseum.com）· 版权归馆方所有'
+    : '图片来源：故宫博物院（dpm.org.cn）· 版权归院方所有';
+  s.innerHTML = `
+    <div class="banner" style="background:${c.hex};--on:${on}">
+      <div class="bn serif">${c.name}</div>
+      <div class="bd mono"><div class="hex">${c.hex}</div><div class="rgb">RGB ${c.rgb}</div></div>
+    </div>
+    <div class="seg-body">
+      <div class="seg-mid">
+        <div class="card">
+          <div class="card-head">文 物 考 据</div>
+          <div class="imgw"><img src="assets/artifact/artifact_${c.id}.jpg" alt="文物实拍"></div>
+          <div class="cap"><div class="obj">${c.obj}</div><div class="muse">${c.muse}　${c.museNo}</div><div class="src">${srcLine}</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head">AIGC 主 视 觉</div>
+          <div class="imgw"><img src="assets/main/main_${c.id}.png" alt="AIGC 主视觉"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">诗 词 注 记</div>
+          <div class="poem-wrap"><div class="pt serif">${c.poem}</div><div class="au">${c.poet}</div></div>
+        </div>
+      </div>
+      <div class="seg-foot">
+        <div class="meaning serif">${c.meaning}</div>
+        <div class="meta"><b>古籍出处</b><br>${c.origin}<br><br><b>色值来源</b><br>${c.source}</div>
+      </div>
+    </div>`;
+  return s;
+}
+
+svScroll.appendChild(svIntro());
+COLORS.forEach(c => svScroll.appendChild(svColorSeg(c)));
+svScroll.appendChild(svOutro());
+
+COLORS.forEach((c, i) => {
+  const d = document.createElement('button');
+  d.className = 'sv-dot'; d.type = 'button';
+  d.style.background = c.hex; d.title = c.name;
+  d.addEventListener('click', () => svGo(i + 1, true));
+  svDots.appendChild(d);
+});
+const svDotEls = svDots.querySelectorAll('.sv-dot');
+document.getElementById('svPrev').addEventListener('click', () => svGo(svCur - 1, true));
+document.getElementById('svNext').addEventListener('click', () => svGo(svCur + 1, true));
+document.getElementById('back3d').addEventListener('click', closeScroll);
+
+// smooth=false 时必须临时关掉 CSS 的 scroll-behavior，否则 scrollLeft 会被当成平滑滚动，
+// 打开卷轴时会从引首一路滑到目标色段。
+function svGo(idx, smooth) {
+  idx = Math.max(0, Math.min(SV_TOTAL - 1, idx));
+  svCur = idx;
+  const left = idx * svScroll.clientWidth;
+  if (smooth) { svScroll.scrollTo({ left, behavior: 'smooth' }); return; }
+  const prev = svScroll.style.scrollBehavior;
+  svScroll.style.scrollBehavior = 'auto';
+  svScroll.scrollLeft = left;
+  svScroll.style.scrollBehavior = prev;
+  svSync(idx);
+}
+function svSync(i) {
+  svCur = i;
+  svDotEls.forEach((d, k) => d.classList.toggle('on', k === i - 1));
+  svFill.style.width = ((i / (SV_TOTAL - 1)) * 100) + '%';
+}
+svScroll.addEventListener('scroll', () => {
+  const w = svScroll.clientWidth;
+  if (!w) return;
+  svSync(Math.round(svScroll.scrollLeft / w));
+});
+
+function openScroll(i) {
+  if (controls.isLocked) controls.unlock();
+  info.classList.remove('show');
+  currentIdx = -1;
+  svEl.classList.add('on');
+  // 重放「从中间向两侧铺开」的动效：先摘掉 class 强制重排，再加回去
+  svEl.classList.remove('unrolling');
+  void svEl.offsetWidth;
+  svEl.classList.add('unrolling');
+  // 等覆盖层拿到布局宽度后再定位（否则 clientWidth 还是 0，会停在引首）
+  requestAnimationFrame(() => svGo(i + 1, false));
+}
+function closeScroll() {
+  svEl.classList.remove('on', 'unrolling');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!svEl.classList.contains('on')) return;
+  if (e.key === 'ArrowRight') svGo(svCur + 1, true);
+  else if (e.key === 'ArrowLeft') svGo(svCur - 1, true);
+  else if (e.key === 'Escape') closeScroll();
+});
+
+/* ============ 主循环 ============ */
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  if (controls.isLocked) {
+    const speed = 5.0;
+    controls.moveForward(dir.f * speed * dt);
+    controls.moveRight(dir.s * speed * dt);
+    const p = controls.getObject().position;
+    // 限制在展厅内（墙半径内）
+    const r = Math.sqrt(p.x*p.x + p.z*p.z);
+    if (r > MUSE_R - 1.2) { p.x *= (MUSE_R - 1.2)/r; p.z *= (MUSE_R - 1.2)/r; }
+    // 碰撞：展台 + 中央台
+    const blockers = [...exhibits.map(e => ({x:e.x, z:e.z, r:1.6})), {x:0, z:0, r:1.8}];
+    blockers.forEach(b => {
+      const dx = p.x - b.x, dz = p.z - b.z;
+      const d = Math.sqrt(dx*dx + dz*dz);
+      if (d < b.r && d > 0.0001) { p.x = b.x + dx/d*b.r; p.z = b.z + dz/d*b.r; }
+    });
+    proximity();
+  }
+
+  // 卷轴覆盖层整个盖住展厅时不必重绘（外面还有 4 个 11–17MB 的 GLB）
+  if (!svEl.classList.contains('on')) renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
