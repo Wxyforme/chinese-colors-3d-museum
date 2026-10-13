@@ -3,38 +3,94 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>传统古色 · 3D 博物馆</title>
+<title>传统古色 · 3D 博物馆与色谱长卷 [b31-local]</title>
 <style>
-  :root { --desk: #14120e; }
+  /* ============================================================
+     共享：变量 / 复位 / 字体
+     ============================================================ */
+  :root {
+    --desk: #14120e;          /* 桌面深底（两个视图共用的暗色底） */
+    --paper: #e8ddc3;         /* 卷轴纸张底色 */
+    --ink: #3a3323;           /* 纸上墨字 */
+    --ink-soft: #7c735c;
+    --segw: 88vw;             /* 卷轴单段宽 = 画心宽 */
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
-  body { font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", serif; background: var(--desk); color: #efe7d3; }
+  body {
+    font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", serif;
+    background: var(--desk);
+    color: #efe7d3;
+  }
   .serif { font-family: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif; }
   .mono { font-family: "SF Mono", "JetBrains Mono", "Consolas", "Menlo", monospace; }
 
+  /* 两个顶层视图容器：靠显隐切换，互不干扰 */
+  .view { position: fixed; inset: 0; }
+  .view.hidden { display: none; }
+
+  /* ============================================================
+     视图 A · 3D 博物馆
+     注意：容器上不可加 transform/filter/backdrop-filter，
+     否则会成为 position:fixed 子元素的包含块，画布与顶栏会错位。
+     ============================================================ */
+  #view-museum { color: #efe7d3; }
+
   #c3d { position: fixed; inset: 0; display: block; }
 
-  header {
+  #view-museum header {
     position: fixed; top: 0; left: 0; right: 0; z-index: 20;
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 28px;
     background: linear-gradient(180deg, rgba(20,18,14,0.85), rgba(20,18,14,0));
     pointer-events: none;
   }
-  header .brand { pointer-events: auto; }
-  header .cn { font-size: 18px; font-weight: 700; letter-spacing: 0.14em; }
-  header .en { font-size: 9px; letter-spacing: 0.26em; color: rgba(239,231,211,0.5); text-transform: uppercase; }
-  .dots { display: flex; gap: 8px; pointer-events: auto; }
-  .dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(239,231,211,0.25); transition: transform 0.2s ease; }
-  .dot.on { transform: scale(1.3); border-color: #efe7d3; }
+  #view-museum header .brand { pointer-events: auto; }
+  #view-museum header .cn { font-size: 18px; font-weight: 700; letter-spacing: 0.14em; }
+  #view-museum header .en { font-size: 9px; letter-spacing: 0.26em; color: rgba(239,231,211,0.5); text-transform: uppercase; }
+  #view-museum .dots { display: flex; gap: 8px; pointer-events: auto; }
+  #view-museum .dot {
+    width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgba(239,231,211,0.25); transition: transform 0.2s ease;
+  }
+  #view-museum .dot.on { transform: scale(1.3); border-color: #efe7d3; }
 
-  .hint {
+  #view-museum .hint {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 20;
     font-size: 12px; letter-spacing: 0.14em; color: rgba(239,231,211,0.75);
     background: rgba(20,18,14,0.6); padding: 10px 18px; border-radius: 20px;
     border: 1px solid rgba(239,231,211,0.2); pointer-events: none;
     transition: opacity 0.4s ease;
   }
+
+  /* 「左键点下去会怎样」的提示（JS 里 setAim() 驱动）。
+     容器本身是一个 0×0 的锚点：漫游中钉在屏幕正中当准星，自由视角下钉在光标处（.free）。
+     子元素相对锚点用 translate 定位，这样圆环才能精确落在锚点上。 */
+  #view-museum .aim {
+    position: fixed; left: 50%; top: 50%; width: 0; height: 0; z-index: 22;
+    opacity: 0; pointer-events: none; transition: opacity 0.22s ease;
+  }
+  #view-museum .aim.on { opacity: 1; }
+  #view-museum .aim .ring {
+    position: absolute; left: 0; top: 0; transform: translate(-50%, -50%);
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 1.5px solid rgba(239,231,211,0.95);
+    box-shadow: 0 0 0 4px rgba(239,231,211,0.14), 0 1px 6px rgba(0,0,0,0.6);
+  }
+  #view-museum .aim .tip {
+    position: absolute; left: 0; top: 22px; transform: translateX(-50%);
+    white-space: nowrap; font-size: 13px; letter-spacing: 0.16em;
+    color: #efe7d3; background: rgba(20,18,14,0.78);
+    border: 1px solid rgba(239,231,211,0.38); border-radius: 18px;
+    padding: 8px 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  }
+  /* 自由视角：不摆准星，气泡跟在光标右下 */
+  #view-museum .aim.free .ring { display: none; }
+  #view-museum .aim.free .tip {
+    left: 8px; top: 8px; transform: none; font-size: 12px; padding: 6px 13px;
+  }
+  /* 漫游中「没对着展品」时的提示压暗一档，别抢戏 */
+  #view-museum .aim.dim .tip { opacity: 0.55; }
 
   #info {
     position: fixed; left: 28px; bottom: 30px; z-index: 20; width: 320px;
@@ -51,6 +107,15 @@
   #info .obj { font-size: 12px; color: rgba(239,231,211,0.85); line-height: 1.6; }
   #info .poem { margin-top: 10px; font-size: 13px; line-height: 1.7; color: rgba(239,231,211,0.9); }
   #info .poem .au { font-size: 11px; color: rgba(239,231,211,0.55); }
+  /* 信息卡上的「展卷」按钮（注意不要复用卷轴的 .btn，那会串样式） */
+  #info .open-scroll {
+    display: block; width: 100%; margin-top: 13px; padding: 9px 14px;
+    cursor: pointer; font-family: inherit; font-size: 12px; letter-spacing: 0.16em;
+    background: rgba(239,231,211,0.1); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.3); border-radius: 8px;
+    transition: background 0.2s ease;
+  }
+  #info .open-scroll:hover { background: rgba(239,231,211,0.22); }
 
   #loading {
     position: fixed; inset: 0; z-index: 40; background: var(--desk);
@@ -62,213 +127,368 @@
   #loading.hide { opacity: 0; pointer-events: none; }
 
   /* ============================================================
-     卷轴详解覆盖层：在展厅里点展品后展开该色的卷轴段。
-     所有选择器都挂在 #scrollview 下做命名空间隔离，
-     否则会和 3D 页已有的 header / .dot / body 样式互相覆盖。
+     视图 B · 色谱长卷
      ============================================================ */
-  #scrollview {
-    position: fixed; inset: 0; z-index: 50; display: none;
-    --paper: #e8ddc3; --ink: #3a3323; --ink-soft: #7c735c; --segw: 88vw;
-    background: radial-gradient(120% 90% at 50% 0%, #1c1913 0%, #14120e 55%);
+  #view-scroll {
+    background: radial-gradient(120% 90% at 50% 0%, #1c1913 0%, var(--desk) 55%);
     color: var(--ink);
+    -webkit-font-smoothing: antialiased;
   }
-  #scrollview.on { display: block; }
+  /* 复入时只做短淡入（注意：opacity 不会让 fixed 子元素改变定位基准） */
+  #view-scroll.fade { animation: viewFade 0.35s ease both; }
+  @keyframes viewFade { from { opacity: 0; } to { opacity: 1; } }
 
-  #scrollview .sv-head {
-    position: absolute; top: 0; left: 0; right: 0; z-index: 30;
+  #view-scroll header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 30;
     display: flex; align-items: center; justify-content: space-between;
     padding: 18px 30px;
     background: linear-gradient(180deg, rgba(20,18,14,0.9), rgba(20,18,14,0));
     pointer-events: none;
   }
-  #scrollview .sv-head .cn { font-size: 19px; font-weight: 700; letter-spacing: 0.16em; color: #efe7d3; }
-  #scrollview .sv-head .en { font-size: 9px; letter-spacing: 0.28em; color: rgba(239,231,211,0.5); text-transform: uppercase; }
-  #scrollview .sv-dots { display: flex; gap: 9px; pointer-events: auto; }
-  #scrollview .sv-dot {
+  #view-scroll header .brand { display: flex; align-items: baseline; gap: 12px; pointer-events: auto; }
+  #view-scroll header .cn { font-size: 19px; font-weight: 700; letter-spacing: 0.16em; color: #efe7d3; }
+  #view-scroll header .en { font-size: 9px; letter-spacing: 0.28em; color: rgba(239,231,211,0.5); text-transform: uppercase; }
+  #view-scroll .dots { display: flex; gap: 9px; pointer-events: auto; }
+  #view-scroll .dot {
     width: 13px; height: 13px; border-radius: 50%; cursor: pointer;
-    border: 1px solid rgba(239,231,211,0.25); background: #3a352b; transition: transform 0.2s ease;
+    border: 1px solid rgba(239,231,211,0.25); background: #3a352b;
+    transition: transform 0.2s ease;
   }
-  #scrollview .sv-dot.on { transform: scale(1.45); border-color: #efe7d3; }
+  #view-scroll .dot.on { transform: scale(1.45); border-color: #efe7d3; }
 
-  #scrollview .stage {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  /* 返回按钮固定在**左下角**：卷轴画心占满整屏，放顶栏里会被画面抢掉注意力。
+     DOM 上它也从 <header> 里挪了出来（header 是 fixed + pointer-events:none）。 */
+  #view-scroll .back-btn {
+    position: fixed; left: 26px; bottom: 26px; z-index: 30;
+    pointer-events: auto; cursor: pointer; font-family: inherit;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.16em;
+    background: rgba(20,18,14,0.8); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.5); border-radius: 26px;
+    padding: 12px 26px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  }
+  #view-scroll .back-btn:hover {
+    background: rgba(20,18,14,0.98); border-color: #efe7d3; transform: translateY(-2px);
+  }
+
+  /* 卷轴舞台 */
+  #view-scroll .stage {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
     padding: 7vh 2vw 6vh;
   }
-  #scrollview .roller {
-    position: absolute; top: 7vh; height: 84vh; width: 30px; z-index: 12; border-radius: 15px;
+  #view-scroll .roller {
+    position: absolute; top: 7vh; height: 84vh; width: 30px; z-index: 12;
+    border-radius: 15px;
     background: linear-gradient(90deg, #3f2d18 0%, #b98a52 30%, #d9b277 50%, #9a703d 72%, #3a2a15 100%);
     box-shadow: 0 4px 14px rgba(0,0,0,0.55), inset 0 0 4px rgba(255,255,255,0.15);
   }
-  #scrollview .roller::before, #scrollview .roller::after {
+  #view-scroll .roller::before,
+  #view-scroll .roller::after {
     content: ""; position: absolute; left: 50%; transform: translateX(-50%);
     width: 44px; height: 22px; border-radius: 11px;
     background: radial-gradient(circle at 40% 32%, #e2c084, #8a6436 68%, #5c3f1e);
     box-shadow: 0 3px 8px rgba(0,0,0,0.5);
   }
-  #scrollview .roller::before { top: -12px; }
-  #scrollview .roller::after { bottom: -12px; }
-  #scrollview .roller.left { left: 1.5vw; }
-  #scrollview .roller.right { right: 1.5vw; }
-  /* 展开动效：每次打开重放一次 */
-  #scrollview.unrolling .viewport { animation: svReveal 1.15s cubic-bezier(0.22,0.61,0.36,1) both; }
-  #scrollview.unrolling .roller.left { animation: svRollL 1.25s cubic-bezier(0.22,0.61,0.36,1) both; }
-  #scrollview.unrolling .roller.right { animation: svRollR 1.25s cubic-bezier(0.22,0.61,0.36,1) both; }
+  #view-scroll .roller::before { top: -12px; }
+  #view-scroll .roller::after { bottom: -12px; }
+  #view-scroll .roller.left { left: 50%; margin-left: -15px; animation: rollL 2.2s cubic-bezier(0.22,0.61,0.36,1) 0.15s both; }
+  #view-scroll .roller.right { right: 50%; margin-right: -15px; animation: rollR 2.2s cubic-bezier(0.22,0.61,0.36,1) 0.15s both; }
+  @keyframes rollL { to { left: 1.5vw; margin-left: 0; } }
+  @keyframes rollR { to { right: 1.5vw; margin-right: 0; } }
 
-  #scrollview .viewport {
+  /* 画心 */
+  #view-scroll .viewport {
     position: relative; height: 84vh; width: var(--segw); max-width: 96vw;
     background-color: var(--paper);
     background-image: url('assets/paper_texture.jpg');
     background-size: cover; background-blend-mode: multiply;
-    border-radius: 4px; overflow: hidden;
+    border-radius: 4px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
     clip-path: inset(0 50% 0 50%);
+    animation: reveal 2.2s cubic-bezier(0.22,0.61,0.36,1) 0.15s both;
   }
-  #scrollview .viewport::after {
+  @keyframes reveal { to { clip-path: inset(0 0 0 0); } }
+  #view-scroll .viewport::after {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
     box-shadow: inset 0 0 60px rgba(120,90,40,0.28), inset 0 0 6px rgba(120,90,40,0.3);
   }
-  #scrollview .scroll {
+
+  /* ⚠️ 揭幕/铺开动画写在基础选择器上，没有可切换的类名；
+     而浏览器在 display:none → block 时会重启动画，所以每次复入都会重播 2.2s。
+     用 .settled 把三个动画钉在终态，复入就只走上面那条淡入。 */
+  #view-scroll.settled .viewport { animation: none; clip-path: inset(0 0 0 0); }
+  #view-scroll.settled .roller.left { animation: none; left: 1.5vw; margin-left: 0; }
+  #view-scroll.settled .roller.right { animation: none; right: 1.5vw; margin-right: 0; }
+
+  #view-scroll .scroll {
     position: absolute; inset: 0; display: flex;
     overflow-x: auto; overflow-y: hidden;
     scroll-snap-type: x mandatory; scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
   }
-  #scrollview .scroll::-webkit-scrollbar { display: none; }
-  #scrollview .seg { flex: 0 0 var(--segw); height: 100%; scroll-snap-align: start; position: relative; }
-  #scrollview .seg.intro, #scrollview .seg.outro {
+  #view-scroll .scroll::-webkit-scrollbar { display: none; }
+  #view-scroll .seg { flex: 0 0 var(--segw); height: 100%; scroll-snap-align: start; position: relative; }
+
+  /* 引首 / 拖尾 */
+  #view-scroll .seg.intro,
+  #view-scroll .seg.outro {
     display: flex; flex-direction: column; justify-content: center; align-items: center;
     text-align: center; gap: 22px; padding: 0 8vw;
   }
-  #scrollview .seg.intro .title { font-size: clamp(34px, 5vw, 60px); font-weight: 800; letter-spacing: 0.12em; color: var(--ink); line-height: 1.35; }
-  #scrollview .seg.intro .sub { font-size: 11px; letter-spacing: 0.4em; color: var(--ink-soft); }
-  #scrollview .strip { display: flex; gap: 3px; }
-  #scrollview .strip i { width: 38px; height: 52px; border-radius: 3px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
-  #scrollview .seg.intro .hint { font-size: 11px; letter-spacing: 0.3em; color: var(--ink-soft); }
-  #scrollview .seg.outro .ot { font-size: 20px; letter-spacing: 0.2em; color: var(--ink); margin-bottom: 6px; font-weight: 700; }
-  #scrollview .seg.outro .ol { max-width: 600px; font-size: 12.5px; line-height: 2.1; color: #5a513c; text-align: left; }
+  #view-scroll .seg.intro .title { font-size: clamp(34px, 5vw, 60px); font-weight: 800; letter-spacing: 0.12em; color: var(--ink); line-height: 1.35; }
+  #view-scroll .seg.intro .sub { font-size: 11px; letter-spacing: 0.4em; color: var(--ink-soft); }
+  #view-scroll .strip { display: flex; gap: 3px; }
+  #view-scroll .strip i { width: 38px; height: 52px; border-radius: 3px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+  #view-scroll .seg.intro .hint { font-size: 11px; letter-spacing: 0.3em; color: var(--ink-soft); }
+  #view-scroll .seg.outro .ot { font-size: 20px; letter-spacing: 0.2em; color: var(--ink); margin-bottom: 6px; font-weight: 700; }
+  #view-scroll .seg.outro .ol { max-width: 600px; font-size: 12.5px; line-height: 2.1; color: #5a513c; text-align: left; }
 
-  #scrollview .seg.color { display: flex; flex-direction: column; }
-  #scrollview .banner {
-    flex: 0 0 26%; min-height: 150px; display: flex; align-items: center; justify-content: space-between;
+  /* 色段 */
+  #view-scroll .seg.color { display: flex; flex-direction: column; }
+  #view-scroll .banner {
+    flex: 0 0 26%; min-height: 150px;
+    display: flex; align-items: center; justify-content: space-between;
     padding: 0 44px; position: relative; overflow: hidden;
+    transition: background-color 0.4s ease;
   }
-  #scrollview .banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(0,0,0,0.06)); }
-  #scrollview .banner .bn { font-size: clamp(48px, 7vw, 96px); font-weight: 800; color: var(--on); position: relative; z-index: 1; line-height: 0.9; }
-  #scrollview .banner .bd { text-align: right; position: relative; z-index: 1; }
-  #scrollview .banner .bd .hex { font-size: 21px; color: var(--on); }
-  #scrollview .banner .bd .rgb { font-size: 11px; color: var(--on); opacity: 0.7; margin-top: 5px; letter-spacing: 0.12em; }
+  #view-scroll .banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(0,0,0,0.06)); }
+  #view-scroll .banner .bn { font-size: clamp(48px, 7vw, 96px); font-weight: 800; letter-spacing: 0.02em; color: var(--on); position: relative; z-index: 1; line-height: 0.9; }
+  #view-scroll .banner .bd { text-align: right; position: relative; z-index: 1; }
+  #view-scroll .banner .bd .hex { font-size: 21px; letter-spacing: 0.05em; color: var(--on); }
+  #view-scroll .banner .bd .rgb { font-size: 11px; color: var(--on); opacity: 0.7; margin-top: 5px; letter-spacing: 0.12em; }
 
-  #scrollview .seg-body { flex: 1; display: flex; flex-direction: column; padding: 22px 44px 20px; min-height: 0; }
-  #scrollview .seg-mid { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 18px; flex: 1; min-height: 0; }
-  #scrollview .card {
+  #view-scroll .seg-body { flex: 1; display: flex; flex-direction: column; padding: 22px 44px 20px; min-height: 0; }
+  #view-scroll .seg-mid { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 18px; flex: 1; min-height: 0; }
+  #view-scroll .card {
     background: rgba(255,255,255,0.42); border: 1px solid rgba(90,75,45,0.22); border-radius: 10px;
     padding: 14px; display: flex; flex-direction: column; min-height: 0;
   }
-  #scrollview .card-head { font-size: 10px; letter-spacing: 0.26em; color: var(--ink-soft); margin-bottom: 11px; padding-bottom: 8px; border-bottom: 1px solid rgba(90,75,45,0.2); }
-  #scrollview .imgw {
-    flex: 1; background: #fff; border-radius: 7px; overflow: hidden; min-height: 0;
-    display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,0.16);
-  }
-  #scrollview .imgw img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  #scrollview .cap { margin-top: 11px; }
-  #scrollview .cap .obj { font-size: 12.5px; font-weight: 700; line-height: 1.5; color: var(--ink); }
-  #scrollview .cap .muse { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
-  #scrollview .cap .src { margin-top: 7px; padding-top: 7px; border-top: 1px dashed rgba(90,75,45,0.3); font-size: 9.5px; color: #8a7d63; line-height: 1.5; }
-  #scrollview .poem-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 11px; }
-  #scrollview .poem-wrap .pt { writing-mode: vertical-rl; text-orientation: upright; font-size: 20px; letter-spacing: 0.24em; line-height: 1.5; color: var(--ink); }
-  #scrollview .poem-wrap .au { writing-mode: vertical-rl; font-size: 10.5px; color: var(--ink-soft); letter-spacing: 0.14em; }
-  #scrollview .seg-foot { margin-top: 18px; display: flex; gap: 36px; align-items: flex-start; }
-  #scrollview .seg-foot .meaning { font-size: 13.5px; line-height: 1.95; color: #4a4230; max-width: 540px; }
-  #scrollview .seg-foot .meta { font-size: 11.5px; line-height: 1.85; color: var(--ink-soft); }
-  #scrollview .seg-foot .meta b { color: var(--ink); letter-spacing: 0.04em; }
+  #view-scroll .card-head { font-size: 10px; letter-spacing: 0.26em; color: var(--ink-soft); margin-bottom: 11px; padding-bottom: 8px; border-bottom: 1px solid rgba(90,75,45,0.2); }
+  #view-scroll .imgw { flex: 1; background: #fff; border-radius: 7px; overflow: hidden; min-height: 0; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,0.16); }
+  #view-scroll .imgw img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #view-scroll .cap { margin-top: 11px; }
+  #view-scroll .cap .obj { font-size: 12.5px; font-weight: 700; line-height: 1.5; color: var(--ink); }
+  #view-scroll .cap .muse { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+  #view-scroll .cap .src { margin-top: 7px; padding-top: 7px; border-top: 1px dashed rgba(90,75,45,0.3); font-size: 9.5px; color: #8a7d63; line-height: 1.5; }
+  #view-scroll .poem-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 11px; }
+  #view-scroll .poem-wrap .pt { writing-mode: vertical-rl; text-orientation: upright; font-size: 20px; letter-spacing: 0.24em; line-height: 1.5; color: var(--ink); }
+  #view-scroll .poem-wrap .au { writing-mode: vertical-rl; font-size: 10.5px; color: var(--ink-soft); letter-spacing: 0.14em; }
 
-  #scrollview .controls { position: absolute; bottom: 24px; right: 2.6vw; z-index: 30; display: flex; gap: 10px; }
-  #scrollview .btn {
+  #view-scroll .seg-foot { margin-top: 18px; display: flex; gap: 36px; align-items: flex-start; }
+  #view-scroll .seg-foot .meaning { font-size: 13.5px; line-height: 1.95; color: #4a4230; max-width: 540px; }
+  #view-scroll .seg-foot .meta { font-size: 11.5px; line-height: 1.85; color: var(--ink-soft); }
+  #view-scroll .seg-foot .meta b { color: var(--ink); letter-spacing: 0.04em; }
+
+  /* 控制（必须留在 #view-scroll 内，否则会浮在 3D 视图上） */
+  #view-scroll .controls { position: fixed; bottom: 24px; right: 2.6vw; z-index: 30; display: flex; gap: 10px; }
+  #view-scroll .btn {
     width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
     border: 1px solid rgba(239,231,211,0.28); background: rgba(20,18,14,0.55);
-    color: #efe7d3; font-size: 17px; line-height: 1; font-family: inherit;
+    color: #efe7d3; font-size: 17px; line-height: 1;
     transition: background 0.2s ease, transform 0.2s ease;
   }
-  #scrollview .btn:hover { background: rgba(20,18,14,0.9); transform: translateY(-2px); }
-  #scrollview .pbar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; z-index: 30; background: rgba(255,255,255,0.07); }
-  #scrollview .pbar i { display: block; height: 100%; width: 0; background: #d9b277; transition: width 0.25s ease; }
+  #view-scroll .btn:hover { background: rgba(20,18,14,0.9); transform: translateY(-2px); }
+  #view-scroll .pbar { position: fixed; bottom: 0; left: 0; right: 0; height: 3px; z-index: 30; background: rgba(255,255,255,0.07); }
+  #view-scroll .pbar i { display: block; height: 100%; width: 0; background: #d9b277; transition: width 0.25s ease; }
 
-  /* 返回展厅 */
-  #back3d {
-    position: absolute; bottom: 24px; left: 2.6vw; z-index: 31;
-    display: flex; align-items: center; gap: 8px;
-    padding: 11px 20px; border-radius: 22px; cursor: pointer; font-family: inherit;
-    border: 1px solid rgba(239,231,211,0.28); background: rgba(20,18,14,0.62);
-    color: #efe7d3; font-size: 13px; letter-spacing: 0.12em;
-    transition: background 0.2s ease, transform 0.2s ease;
+  /* 顶栏工具区（色点 + 配乐开关） */
+  #view-museum .tools { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
+  #view-museum .hbtn {
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+    font-family: inherit; font-size: 13px; line-height: 1;
+    background: rgba(20,18,14,0.55); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.25);
+    transition: background 0.2s ease, opacity 0.2s ease;
   }
-  #back3d:hover { background: rgba(20,18,14,0.92); transform: translateY(-2px); }
+  #view-museum .hbtn:hover { background: rgba(20,18,14,0.9); }
+  #view-museum .hbtn.on { background: rgba(217,178,119,0.9); color: #241d12; border-color: #d9b277; }
+  #view-museum .hbtn.off { opacity: 0.3; cursor: not-allowed; }
 
-  /* 信息面板里的「展开卷轴」按钮 */
-  #info .more {
-    margin-top: 14px; width: 100%; padding: 10px 12px; border-radius: 8px; cursor: pointer;
-    font-family: inherit; font-size: 12.5px; letter-spacing: 0.1em;
-    border: 1px solid rgba(239,231,211,0.35); background: rgba(239,231,211,0.1);
-    color: #efe7d3; transition: background 0.2s ease;
+  /* ============================================================
+     视图 C · 观画（全屏放大 + 引导词 + 配乐）　与卷轴同属「离开展厅」的模态
+     ============================================================ */
+  #view-painting {
+    background: radial-gradient(120% 90% at 50% 0%, #1a1712 0%, #0d0b08 62%);
+    color: #efe7d3; overflow: auto;
   }
-  #info .more:hover { background: rgba(239,231,211,0.22); }
+  #view-painting header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 26px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(20,18,14,0.92), rgba(20,18,14,0));
+  }
+  #view-painting header .cn { font-size: 17px; font-weight: 700; letter-spacing: 0.16em; }
+  #view-painting header .en { font-size: 9px; letter-spacing: 0.26em; color: rgba(239,231,211,0.5); }
+  #view-painting .back-btn {
+    pointer-events: auto; cursor: pointer; font-family: inherit;
+    font-size: 12px; letter-spacing: 0.14em;
+    background: rgba(20,18,14,0.6); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.28); border-radius: 18px;
+    padding: 7px 16px; transition: background 0.2s ease;
+  }
+  #view-painting .back-btn:hover { background: rgba(20,18,14,0.95); }
+
+  #view-painting .pstage {
+    display: flex; gap: 30px; align-items: flex-start; justify-content: center;
+    padding: 80px 30px 36px; min-height: 100%;
+  }
+  /* 画框（立轴装裱：深木框 + 内金线） */
+  #view-painting .pframe {
+    position: relative; flex: 0 1 auto;
+    border: 11px solid #463a24; border-radius: 3px;
+    box-shadow: 0 26px 72px rgba(0,0,0,0.7), inset 0 0 0 2px #a8853f;
+    background: #cfc0a0; line-height: 0;
+  }
+  #view-painting .pframe img { max-width: 100%; max-height: 74vh; display: block; margin: 0 auto; }
+  #view-painting .pph {
+    width: 46vw; min-width: 300px; height: 58vh; min-height: 300px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 26px; text-align: center; line-height: 1.9;
+    background: linear-gradient(150deg, #e7dcbd, #dccca6 55%, #ceb98f);
+    color: #6b5b3c;
+  }
+  #view-painting .pph .t { font-size: 23px; letter-spacing: 0.2em; }
+  #view-painting .pph .s { font-size: 11.5px; letter-spacing: 0.08em; opacity: 0.85; }
+  #view-painting .pspots { position: absolute; inset: 0; pointer-events: none; }
+  #view-painting .pspot {
+    position: absolute; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 3px rgba(0,0,0,0.5); cursor: pointer; pointer-events: auto;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  #view-painting .pspot:hover { box-shadow: 0 0 0 3px rgba(0,0,0,0.6), 0 0 0 7px rgba(217,178,119,0.7); }
+  #view-painting .pspot.on { transform: scale(1.45); box-shadow: 0 0 0 3px #241d12, 0 0 0 7px #d9b277; }
+  #view-painting .pside { flex: 0 1 380px; min-width: 290px; display: flex; flex-direction: column; gap: 18px; }
+  #view-painting .ptitle { font-size: 24px; letter-spacing: 0.12em; }
+  #view-painting .ptitle .au { display: block; margin-top: 7px; font-size: 11.5px; letter-spacing: 0.14em; color: rgba(239,231,211,0.55); }
+  #view-painting .pguide {
+    font-size: 13.5px; line-height: 2.05; color: rgba(239,231,211,0.86);
+    border-left: 2px solid rgba(217,178,119,0.5); padding-left: 14px; white-space: pre-wrap;
+  }
+  #view-painting .pguide.empty { color: rgba(239,231,211,0.35); font-style: italic; }
+  #view-painting .pchips { display: flex; flex-wrap: wrap; gap: 8px; }
+  #view-painting .pchip {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    font-family: inherit; font-size: 12px; letter-spacing: 0.08em;
+    background: rgba(239,231,211,0.07); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.2); border-radius: 16px;
+    padding: 5px 12px 5px 6px; transition: background 0.2s ease;
+  }
+  #view-painting .pchip i { width: 13px; height: 13px; border-radius: 50%; display: block; }
+  #view-painting .pchip.on { background: rgba(239,231,211,0.24); border-color: #efe7d3; }
+  #view-painting .pblurb { min-height: 66px; font-size: 12.5px; line-height: 1.95; color: rgba(239,231,211,0.78); }
+  #view-painting .pblurb b { color: #efe7d3; letter-spacing: 0.04em; }
+  #view-painting .pblurb .where { color: rgba(239,231,211,0.5); }
+  #view-painting .paudio audio { width: 100%; height: 34px; }
+  #view-painting .paudio .note { font-size: 11px; letter-spacing: 0.06em; color: rgba(239,231,211,0.42); }
 
   @media (max-width: 900px) {
-    #scrollview { --segw: 92vw; }
-    #scrollview .seg-mid { grid-template-columns: 1fr; gap: 10px; overflow-y: auto; }
-    #scrollview .seg-body { padding: 14px 20px 16px; }
-    #scrollview .banner { padding: 0 24px; }
-    #scrollview .imgw { min-height: 120px; }
-    #scrollview .seg-foot { flex-direction: column; gap: 10px; }
+    :root { --segw: 92vw; }
+    #view-scroll .seg-mid { grid-template-columns: 1fr; gap: 10px; overflow-y: auto; }
+    #view-scroll .seg-body { padding: 14px 20px 16px; }
+    #view-scroll .banner { padding: 0 24px; }
+    #view-scroll .imgw { min-height: 120px; }
+    #view-scroll .seg-foot { flex-direction: column; gap: 10px; }
+    #view-painting .pstage { flex-direction: column; align-items: center; padding: 72px 18px 30px; }
+    #view-painting .pframe { max-width: 94vw; }
+    #view-painting .pph { width: 82vw; height: 40vh; min-height: 220px; }
+    #view-painting .pside { flex: 1 1 auto; width: 100%; max-width: 620px; }
   }
-  @keyframes svReveal { to { clip-path: inset(0 0 0 0); } }
-  @keyframes svRollL { from { left: 50%; margin-left: -15px; } to { left: 1.5vw; margin-left: 0; } }
-  @keyframes svRollR { from { right: 50%; margin-right: -15px; } to { right: 1.5vw; margin-right: 0; } }
 </style>
 </head>
 <body>
-<canvas id="c3d"></canvas>
 
-<header>
-  <div class="brand">
-    <div class="cn serif">传统古色 · 3D 博物馆</div>
-    <div class="en mono">Traditional Chinese Colors · 3D Museum</div>
-  </div>
-  <div class="dots" id="dots"></div>
-</header>
+<!-- ==================== 视图 A：3D 博物馆 ==================== -->
+<div id="view-museum" class="view">
+  <canvas id="c3d"></canvas>
 
-<div class="hint" id="hint">点击画面进入漫游 · WASD 移动 · 鼠标转视角 · ESC 退出</div>
-<div id="info"></div>
-<div id="loading"><div class="t serif">正在布展 · 加载八色藏品</div><div class="p mono" id="lp">0 / 8</div></div>
-
-<!-- 卷轴详解覆盖层：默认隐藏，点展品后展开到该色的卷轴段 -->
-<div id="scrollview" role="dialog" aria-modal="true" aria-label="色彩卷轴详解">
-  <div class="sv-head">
+  <header>
     <div class="brand">
-      <div class="cn serif">传统古色 · 色谱长卷</div>
-      <div class="en mono">A HANDSCROLL OF EIGHT CHINESE COLORS</div>
+      <div class="cn serif">传统古色 · 3D 博物馆</div>
+      <div class="en mono">Traditional Chinese Colors · 3D Museum</div>
     </div>
-    <div class="sv-dots" id="svDots"></div>
+    <div class="tools">
+      <div class="dots" id="dots-museum"></div>
+      <button class="hbtn" id="bgm-btn" title="馆内环境配乐">♪</button>
+    </div>
+  </header>
+
+  <div class="hint" id="hint">走近展品 · 左键点击进入卷轴 · 点击空地漫游 · WASD 移动</div>
+  <div class="aim" id="aim">
+    <span class="ring"></span>
+    <span class="tip serif" id="aim-tip">点击进入卷轴</span>
   </div>
+  <div id="info"></div>
+  <div id="loading"><div class="t serif">正在布展 · 加载八色藏品</div><div class="p mono" id="lp">0 / 8</div></div>
+</div>
+
+<!-- ==================== 视图 B：色谱长卷 ==================== -->
+<div id="view-scroll" class="view hidden">
+  <header>
+    <div class="brand">
+      <span class="cn serif">传统古色 · 色谱</span>
+      <span class="en mono">A Handscroll of Chinese Colors</span>
+    </div>
+    <div class="dots" id="dots-scroll"></div>
+  </header>
+
+  <!-- 返回按钮：固定在左下角（样式见 #view-scroll .back-btn），故不放进 header -->
+  <button class="back-btn" id="back-btn">‹ 返回博物馆</button>
 
   <div class="stage">
     <div class="roller left"></div>
-    <div class="roller right"></div>
     <div class="viewport">
-      <div class="scroll" id="svScroll"></div>
+      <div class="scroll" id="scroll"></div>
     </div>
+    <div class="roller right"></div>
   </div>
-
-  <button id="back3d" type="button">← 返回展厅 <span class="mono" style="opacity:.55">ESC</span></button>
 
   <div class="controls">
-    <button class="btn" id="svPrev" type="button" aria-label="上一段">‹</button>
-    <button class="btn" id="svNext" type="button" aria-label="下一段">›</button>
+    <button class="btn" id="prev">‹</button>
+    <button class="btn" id="next">›</button>
   </div>
-  <div class="pbar"><i id="svFill"></i></div>
+  <div class="pbar"><i id="pfill"></i></div>
 </div>
 
-<!-- three.js 已本地化到 assets/vendor/three/，不再依赖外网 CDN（原先依赖 cdn.jsdelivr.net，被墙/重置时整页卡在黑屏加载页） -->
+<!-- ==================== 视图 C：观画（第二单元 · 全屏放大） ==================== -->
+<div id="view-painting" class="view hidden">
+  <header>
+    <div class="brand">
+      <div class="cn serif" id="paint-bar-title">第二单元 · 绘事・绢上观</div>
+      <div class="en mono">Reading a Painting</div>
+    </div>
+    <button class="back-btn" id="paint-back">‹ 返回展厅</button>
+  </header>
+
+  <div class="pstage">
+    <div class="pframe">
+      <img id="paint-img" alt="画作" style="display:none">
+      <div class="pph" id="paint-ph">
+        <div class="t serif" id="paint-ph-title">《月曼清游图》</div>
+        <div class="s serif" id="paint-ph-sub">清 · 陈枚</div>
+        <div class="s mono" id="paint-ph-path">assets/painting/painting.jpg</div>
+      </div>
+      <div class="pspots" id="paint-spots"></div>
+    </div>
+
+    <aside class="pside">
+      <div class="ptitle serif" id="paint-title">《月曼清游图》<span class="au">清 · 陈枚</span></div>
+      <div class="pguide empty" id="paint-guide"></div>
+      <div class="pchips" id="paint-chips"></div>
+      <div class="pblurb" id="paint-blurb">点击色名，查看该色在画中的位置与释义。</div>
+      <div class="paudio">
+        <audio id="paint-audio" controls preload="metadata"></audio>
+        <div class="note" id="paint-audio-note" style="display:none">配乐待置入：assets/audio/painting.mp3</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- 环境配乐（无文件时自动禁用按钮，不会报错白屏） -->
+<audio id="bgm" loop preload="auto"></audio>
+
 <script type="importmap">
 {
   "imports": {
@@ -280,7 +500,8 @@
 
 <script>
 /* 看门狗：模块脚本若因资源缺失 / CORS / 解析失败而没能启动，给出可读报错，而不是永久黑屏。
-   模块脚本成功加载 three.js 后会调用 window.__museumBooted()。 */
+   模块脚本成功加载 three.js 后会调用 window.__museumBooted()。
+   （本地化 three.js 后，若 assets/vendor/ 没随页面一起部署，靠它提示，而不是卡在加载页。） */
 window.__museumState = { booted: false, failed: [] };
 window.__museumBooted = function () { window.__museumState.booted = true; };
 window.__museumFail = function (html) {
@@ -307,12 +528,17 @@ setTimeout(function () {
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-// 三个 import 都成功解析到本地文件，撤下看门狗
+// 四个 import 都成功解析到本地文件，撤下看门狗
 window.__museumBooted();
 
-// 展品数据。字段比展厅本身需要的多：rgb/light/origin/source/meaning/muse/museNo
-// 是「卷轴详解」覆盖层要用的考据内容，展厅只用到 id/name/hex/obj/muse/poem/poet。
+/* ============================================================
+   0. 八色数据 —— 3D 与卷轴共用唯一一份
+   字段沿用卷轴版结构：obj=器物名，muse=朝代·馆藏（分开存，
+   3D 信息卡需要合成展示；原 3D 版把两者拼成一个 obj 字符串，
+   合并后统一到分字段，展示时再拼）。
+   ============================================================ */
 const COLORS = [
   { id:'jilan', name:'霁蓝', hex:'#3C4654', rgb:'60 · 70 · 84', light:false,
     origin:'《南窑笔记》、许之衡《饮流斋说瓷》、刘子芬《竹园陶说》', source:'《中国传统色：故宫里的色彩美学》',
@@ -356,6 +582,106 @@ const COLORS = [
     poem:'沾衣欲湿杏花雨，吹面不寒杨柳风', poet:'宋 · 志南《绝句》' }
 ];
 
+/* ============================================================
+   0.5 展陈文本与可下行资源　★ 你后续给料，改这一块就够了
+   ============================================================ */
+const ASSETS = {
+  /* 内厅主展墙 + 序厅喷绘长墙共用：清 · 陈枚《月曼清游图》。
+     文件不存在时会自动退回程序生成的占位画面，不会白屏。 */
+  painting: {
+    img:    'assets/painting/painting.jpg',       // 内厅主展墙 + 观画视图：十二开 6×2 拼图（2160×930 = 1440:620）
+    wallImg:'assets/painting/painting-wall.jpg',  // 序厅喷绘长墙：十二开横排长卷（2048×470 = 该画布画心区）
+    audio:  'assets/audio/bgm.mp3',              // 观画配乐 = 馆内那首（一首共用）；要分开就换成一个新文件名
+    title:  '月曼清游图',
+    author: '清 · 陈枚',
+    guide:  '',            // ← 引导词：直接写多行文本（可用 \n 分段）
+    /* ← 色标热点：拿到高清画作后填 0~1 归一化坐标（x 右 / y 下），
+         留 null 就不画热点。例：jilan: { x: 0.42, y: 0.71 } */
+    spots: { jilan:null, dailan:null, shiqing:null, yuebai:null,
+             ouhe:null, songhua:null, xinghuang:null, canghuang:null }
+  },
+  bgm: 'assets/audio/bgm.mp3',                       // ← 馆内环境配乐
+  door: { title: '传统古色', sub: 'TRADITIONAL CHINESE COLORS' },   // ← 门楣匾额
+  foreword: {                                        // ← 序厅前言展板（你的展词）
+    head: '前　言',
+    body: '我们并不是说这幅画天生就对应着这八个名字，\n'
+        + '而是古人给世间色彩起了温柔的雅称。\n'
+        + '在这卷清宫绘画里，我们可以一一找到：\n'
+        + '霁蓝的沉郁、黛蓝的幽邃、月白的清浅、\n'
+        + '石青的矿物光泽、藕合的柔紫，\n'
+        + '还有松花、杏黄、苍黄层次各异的暖调——\n'
+        + '读懂中国人看待色彩的浪漫。'
+  },
+  u1: { note: '颜色从哪里来？—— 一半从石头里来，一半从草木里来。\n\n'
+             + '本厅按加工的次序陈列：西墙是原料，北墙是工序，南墙是成品。\n'
+             + '沿墙走一圈，就是一方颜色从山野到绢素的全过程。\n\n'
+             + '【石色 · 矿石研磨】石青取蓝铜矿，霁蓝、黛蓝取青金石与蓝铜矿，\n'
+             + '苍黄取赭石。矿石要捣碎、水飞漂洗、静置分级，\n'
+             + '漂得越久越淡 —— 头青、二青、三青，是同一块石头里漂出来的色阶。\n\n'
+             + '【水色 · 草木浸出】松花取槐米，杏黄取栀子，藕合取苏木配胭脂，\n'
+             + '月白是蓼蓝调浅得来的复合色。草木要浸、煮、媒染，\n'
+             + '干料本是褐的、绿的，颜色是煮出来、也染到绢上去的。\n\n'
+             + '展柜分「原料 → 碎料 → 色粉」三层并列；水色另附一方染色绢小样。\n'
+             + '全厅用 3000–4000K 中性白光自斜侧照射，不用彩光、不加特效，只还原本色。' },
+  u4: { note: '互动屏 · 点击色名，跳转画中对应位置并朗读色彩文案\n〔待接入〕' }
+};
+
+/* 第二单元 8 块立式展牌：色名取自 COLORS，画中位置与释义见你的策展方案 */
+const PLATES = [
+  { id:'jilan',     pos:'画中栏杆、深色衣袍', txt:'沉雨初歇，深沉静穆之蓝' },
+  { id:'dailan',    pos:'远景山影',           txt:'远山幽黛，青黑沉静' },
+  { id:'shiqing',   pos:'宫瓦、重色山石',     txt:'蓝铜矿矿物正色，厚重光华' },
+  { id:'yuebai',    pos:'仕女内衬罗衫',       txt:'月华轻染，极浅青蓝' },
+  { id:'ouhe',      pos:'飘带裙裾',           txt:'藕心淡紫，柔婉间色' },
+  { id:'songhua',   pos:'柳芽绶带',           txt:'春日嫩黄，黄绿温润' },
+  { id:'xinghuang', pos:'花果、衣饰',         txt:'杏子成熟柔和暖黄' },
+  { id:'canghuang', pos:'枯木衰草',           txt:'草木暮秋，苍茫灰黄' }
+];
+const COLOR_BY_ID = Object.fromEntries(COLORS.map(c => [c.id, c]));
+
+/* 各单元标题（同时用于门楣、标题墙、导览图） */
+const UNITS = {
+  prologue: { cn:'序 厅', en:'PROLOGUE', note:'中国颜色取自天地草木，自带文学意境' },
+  u1: { cn:'第一单元 · 色源・万物生', en:'SOURCES',  note:'矿物与植物——颜色从哪里来' },
+  u2: { cn:'第二单元 · 绘事・绢上观', en:'ON SILK',  note:'清 陈枚《月曼清游图》' },
+  u3: { cn:'第三单元 · 物色・入人间', en:'IN LIFE',  note:'器物中的中国传统色' },
+  u4: { cn:'第四单元 · 感知・互动',   en:'PERCEIVE', note:'色卡墙 · 互动屏 · 留言墙' }
+};
+
+/* ============================================================
+   0.6 第一单元 · 颜料标本（8 件，两件一柜 × 4 柜）
+   按来源分两类（用户文档）：
+     stone 矿物石色 —— 矿石研磨：矿石原石 → 矿粒 → 色粉
+     plant 植物水色 —— 草木浸出：干料   → 粗碎料 → 色粉（+ 染色绢）
+   色名与 hex 不在这里重复写：用 cid 关联 COLORS。
+   form 决定「干料/原石」层的形制：
+     rock 矿石原石 / bud 槐米串 / fruit 栀子果 / chip 苏木木屑 / bundle 蓼蓝束
+   ============================================================ */
+const MINERALS = [
+  { cid:'shiqing',   kind:'stone', form:'rock',   mat:'蓝铜矿',        comp:'Cu₃(CO₃)₂(OH)₂',              en:'AZURITE',            origin:'云南 · 东川',              pigment:'石青' },
+  { cid:'jilan',     kind:'stone', form:'rock',   mat:'青金石',        comp:'(Na,Ca)₈(AlSiO₄)₆(S,SO₄,Cl)₂', en:'LAZURITE',           origin:'阿富汗 · 巴达赫尚（丝路输入）', pigment:'霁蓝' },
+  { cid:'dailan',    kind:'stone', form:'rock',   mat:'蓝铜矿・青金石', comp:'Cu₃(CO₃)₂(OH)₂ 等',            en:'AZURITE / LAZURITE', origin:'云南 · 西域',              pigment:'黛蓝' },
+  { cid:'canghuang', kind:'stone', form:'rock',   mat:'赭石',          comp:'Fe₂O₃',                        en:'HEMATITE',           origin:'山西 · 代县',              pigment:'苍黄' },
+  { cid:'songhua',   kind:'plant', form:'bud',    mat:'槐米（槐花蕾）', comp:'芦丁等黄酮类',                  en:'SOPHORA BUD',        origin:'华北 · 各地',              pigment:'槐黄・松花' },
+  { cid:'xinghuang', kind:'plant', form:'fruit',  mat:'栀子果实',      comp:'藏红花素类',                    en:'GARDENIA FRUIT',     origin:'江南 · 两湖',              pigment:'栀子' },
+  { cid:'ouhe',      kind:'plant', form:'chip',   mat:'苏木（+胭脂）',  comp:'苏木精 + 胭脂红酸',              en:'SAPANWOOD',          origin:'广东 云南 / 西北',          pigment:'苏木' },
+  { cid:'yuebai',    kind:'plant', form:'bundle', mat:'蓼蓝（复合色）', comp:'靛蓝素',                        en:'POLYGONUM INDIGO',   origin:'江南 · 各地',              pigment:'蓼蓝' }
+];
+const MINERAL_BY_CID = Object.fromEntries(MINERALS.map(m => [m.cid, m]));
+/* 标本墙两段用：北半 石色、南半 水色（各 4 色 × 3 件 = 24） */
+const STONE_CIDS = MINERALS.filter(m => m.kind === 'stone').map(m => m.cid);
+const PLANT_CIDS = MINERALS.filter(m => m.kind === 'plant').map(m => m.cid);
+const IS_STONE = m => m.kind === 'stone';
+
+/* ============================================================
+   1. 视图状态机
+   ============================================================ */
+let currentView = 'museum';
+
+const museumEl = document.getElementById('view-museum');
+const scrollViewEl = document.getElementById('view-scroll');
+
+/* ---------- 3D 场景 ---------- */
 const canvas = document.getElementById('c3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -368,15 +694,15 @@ renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#1a1712');
 
-const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, 0.1, 120);
-camera.position.set(0, 1.7, 7);
+const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, 0.1, 160);
+/* 参观起点：馆外甬道上，正对门楣匾额（默认朝 −Z，即馆门方向） */
+const START = { x: 0, y: 1.7, z: 32 };
+camera.position.set(START.x, START.y, START.z);
 
-/* ============ 博物馆建筑 ============ */
+/* ---------- 博物馆建筑 ---------- */
 const MUSE_R = 14;      // 外墙半径
 const WALL_H = 4.6;     // 墙高
 const STAND_R = 10.6;   // 展台半径
-const STAND_TOP = 1.375; // 展台立柱顶面高度（立柱 y=0.85、高 1.05 → 顶面 1.375）
-const DISPLAY_SIZE = 1.15; // 每件藏品归一化后的最大边长
 
 /* 地板（浅色大理石） */
 const floor = new THREE.Mesh(
@@ -385,7 +711,6 @@ const floor = new THREE.Mesh(
 );
 floor.rotation.x = -Math.PI/2; floor.receiveShadow = true;
 scene.add(floor);
-// 地板中心装饰环
 const floorRing = new THREE.Mesh(
   new THREE.RingGeometry(2.2, 2.3, 96),
   new THREE.MeshBasicMaterial({ color:'#c9bfa8', side:THREE.DoubleSide })
@@ -396,12 +721,10 @@ scene.add(floorRing);
 /* 天花板 */
 const ceil = new THREE.Mesh(
   new THREE.CircleGeometry(MUSE_R, 96),
-  // 加一点自发光，让顶棚读起来像被天光照亮的白色屋顶，而不是黑洞
-  new THREE.MeshStandardMaterial({ color:'#e9e2d2', roughness:0.9, emissive:'#cfc6b2', emissiveIntensity:0.32 })
+  new THREE.MeshStandardMaterial({ color:'#e9e2d2', roughness:0.9 })
 );
 ceil.rotation.x = Math.PI/2; ceil.position.y = WALL_H;
 scene.add(ceil);
-// 中央天窗灯
 const skylight = new THREE.Mesh(
   new THREE.CircleGeometry(2.4, 64),
   new THREE.MeshBasicMaterial({ color:'#fff6e0' })
@@ -409,27 +732,55 @@ const skylight = new THREE.Mesh(
 skylight.rotation.x = Math.PI/2; skylight.position.y = WALL_H - 0.01;
 scene.add(skylight);
 
-/* 八边形外墙（每段为该色） */
-const segW = 2 * MUSE_R * Math.tan(Math.PI/8);
+/* 八边形外墙（每段一色）。南(+Z) / 北(−Z) 各开一个门洞，
+   通向序厅与内厅；门洞按角度把墙段切开，切口由门套遮住。 */
+const DOOR_HALF_ARC = 0.13;                      // 门洞半张角（弧度）≈7.4°，净宽约 3.6
+const DOOR_SPANS = [Math.PI/2, Math.PI*1.5].map(a => [a - DOOR_HALF_ARC, a + DOOR_HALF_ARC]);
+
+/* 把 [lo,hi] 里被 holes 覆盖的区间挖掉，返回剩下的实心区间 */
+function solidSpans(lo, hi, holes) {
+  let parts = [[lo, hi]];
+  for (const [h0, h1] of holes) {
+    const out = [];
+    for (const [s0, s1] of parts) {
+      if (h1 <= s0 || h0 >= s1) { out.push([s0, s1]); continue; }
+      if (s0 < h0) out.push([s0, h0]);
+      if (h1 < s1) out.push([h1, s1]);
+    }
+    parts = out;
+  }
+  return parts.filter(([s0, s1]) => s1 - s0 > 1e-3);
+}
+
 COLORS.forEach((c, i) => {
-  const a = (i / 8) * Math.PI * 2 + Math.PI/8;
-  const wall = new THREE.Mesh(
-    new THREE.PlaneGeometry(segW + 0.15, WALL_H),
-    new THREE.MeshStandardMaterial({ color:c.hex, roughness:0.85 })
-  );
-  wall.position.set(Math.cos(a)*MUSE_R, WALL_H/2, Math.sin(a)*MUSE_R);
-  wall.lookAt(0, WALL_H/2, 0);
-  wall.receiveShadow = true;
-  scene.add(wall);
-  // 踢脚线
-  const base = new THREE.Mesh(
-    new THREE.BoxGeometry(segW + 0.15, 0.22, 0.12),
-    new THREE.MeshStandardMaterial({ color:'#6b6151', roughness:0.6 })
-  );
-  base.position.set(Math.cos(a)*MUSE_R, 0.11, Math.sin(a)*MUSE_R);
-  base.lookAt(0, 0.11, 0);
-  scene.add(base);
+  const c0 = (i / 8) * Math.PI * 2 + Math.PI/8;   // 该色墙段中心角
+  const half = Math.PI / 8;                        // 半张角 22.5°
+  /* DoubleSide：起点移到馆外后，单面墙从外侧会被背面剔除而"透视"进去 */
+  const mat = new THREE.MeshStandardMaterial({ color:c.hex, roughness:0.85, side:THREE.DoubleSide });
+  const baseMat = new THREE.MeshStandardMaterial({ color:'#6b6151', roughness:0.6 });
+  solidSpans(c0 - half, c0 + half, DOOR_SPANS).forEach(([a0, a1]) => {
+    const mid = (a0 + a1) / 2;                     // 子墙段中心角
+    const w = 2 * MUSE_R * Math.tan((a1 - a0) / 2);
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, WALL_H), mat);
+    wall.position.set(Math.cos(mid)*MUSE_R, WALL_H/2, Math.sin(mid)*MUSE_R);
+    wall.lookAt(0, WALL_H/2, 0);
+    wall.receiveShadow = true;
+    scene.add(wall);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(w + 0.15, 0.22, 0.12), baseMat);
+    base.position.set(Math.cos(mid)*MUSE_R, 0.11, Math.sin(mid)*MUSE_R);
+    base.lookAt(0, 0.11, 0);
+    scene.add(base);
+  });
 });
+
+/* 八角屋顶：从馆外看得出建筑轮廓（略高于各展厅屋面，避免共面闪烁） */
+const roof8 = new THREE.Mesh(
+  new THREE.CylinderGeometry(15.4, 15.4, 0.36, 8),
+  new THREE.MeshStandardMaterial({ color:'#4a4438', roughness:0.9 })
+);
+roof8.position.y = WALL_H + 0.22;
+roof8.castShadow = roof8.receiveShadow = true;
+scene.add(roof8);
 
 /* 中央信息台 */
 const center = new THREE.Mesh(
@@ -445,13 +796,9 @@ const centerTop = new THREE.Mesh(
 centerTop.position.y = 0.97;
 scene.add(centerTop);
 
-/* ============ 灯光 ============ */
-// 半球光的「地面色」原来用的 #2a2418 几乎全黑，导致法线朝下的天花板只能吃到这点暗色，
-// 整个顶棚糊成黑幕。改成浅暖灰模拟大理石地板的反弹光。
-scene.add(new THREE.HemisphereLight('#fff3dd', '#9a907a', 0.95));
-// 基础环境光，托住墙面和顶棚的暗部
-scene.add(new THREE.AmbientLight('#5c5344', 0.5));
-const key = new THREE.DirectionalLight('#fff0d8', 1.25);
+/* ---------- 灯光 ---------- */
+scene.add(new THREE.HemisphereLight('#f0e6d2', '#2a2418', 0.7));
+const key = new THREE.DirectionalLight('#fff0d8', 1.5);
 key.position.set(8, 14, 6);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
@@ -459,41 +806,421 @@ key.shadow.camera.left = -20; key.shadow.camera.right = 20;
 key.shadow.camera.top = 20; key.shadow.camera.bottom = -20;
 key.shadow.camera.far = 60;
 scene.add(key);
-// 中央天窗光：扩大照射范围、放缓衰减，让光能铺满整个顶棚
-const topLight = new THREE.PointLight('#fff4dc', 30, 70, 1.25);
+const topLight = new THREE.PointLight('#fff4dc', 22, 40, 1.8);
 topLight.position.set(0, WALL_H - 0.5, 0);
 scene.add(topLight);
 
-/* ============ 展台 ============ */
+/* ---------- 展柜材质与通用尺寸 ---------- */
+const GLASS_MAT = new THREE.MeshPhysicalMaterial({
+  color: '#dff0f6', transparent: true, opacity: 0.16, roughness: 0.05,
+  metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03,
+  side: THREE.DoubleSide, depthWrite: false
+});
+const BRASS_MAT = new THREE.MeshStandardMaterial({ color: '#b6934f', metalness: 0.85, roughness: 0.34 });
+const WOOD_MAT  = new THREE.MeshStandardMaterial({ color: '#5c4b34', roughness: 0.72 });
+
+/* ---------- 第一单元展柜专用材质（第 21 轮）----------
+   玻璃要「微弱自然反光」就得有东西可反 —— 此前全场景没有任何 envMap，
+   clearcoat 只反得出几盏灯的亮点，看着像塑料。这里烘一张环境贴图，
+   **只挂到 CASE_GLASS 上**：GLASS_MAT 是第三单元与 buildVitrine 共用的，
+   给它加 envMap 会连带动到全馆观感（回归风险），所以一个字都不改。 */
+const pmrem = new THREE.PMREMGenerator(renderer);
+/* ⚠️ renderer 这个参数不能省：RoomEnvironment 拿它判断 renderer._useLegacyLights，
+   非 legacy 光照下灯要按物理单位给（900），漏掉就烘出一张几乎全黑的环境贴图。 */
+const ENV_TEX = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+pmrem.dispose();
+const CASE_GLASS = new THREE.MeshPhysicalMaterial({
+  color: '#eef6f8', transparent: true, opacity: 0.12, roughness: 0.03, metalness: 0,
+  clearcoat: 1, clearcoatRoughness: 0.02, side: THREE.DoubleSide, depthWrite: false,
+  envMap: ENV_TEX, envMapIntensity: 0.35            // 0.35 ≈「微弱」，再高就成镜面了
+});
+const CASE_BODY_MAT = new THREE.MeshStandardMaterial({ color: '#4a463e', roughness: 0.72, metalness: 0.04 });
+const CASE_FELT_MAT = new THREE.MeshStandardMaterial({ color: '#e9e3d6', roughness: 0.92 });
+const CASE_STEP_MAT = new THREE.MeshStandardMaterial({ color: '#ded7c6', roughness: 0.86 });
+const CASE_FRAME_MAT = new THREE.MeshStandardMaterial({ color: '#4a4238', roughness: 0.5, metalness: 0.5 });
+const ACRYLIC_MAT   = new THREE.MeshPhysicalMaterial({
+  color: '#eaf2f5', transparent: true, opacity: 0.28, roughness: 0.08, metalness: 0,
+  clearcoat: 1, clearcoatRoughness: 0.04, side: THREE.DoubleSide,
+  envMap: ENV_TEX, envMapIntensity: 0.25
+});
+const PORCELAIN_MAT = new THREE.MeshStandardMaterial({ color: '#f4f1e8', roughness: 0.22 });
+const WALL_T = 0.22;          // 展厅墙体厚度
+const ROOF_COLOR = '#4a4438';
+const FLOOR_C = '#d2ccc0', CEIL_C = '#ded8cb', WALL_C = '#94908a';
+
+/* 透明玻璃展柜（黄铜包边）：底座上罩一个圆筒玻璃罩 */
+function buildVitrine(radius, height, baseY) {
+  const g = new THREE.Group();
+  const shell = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, height, 40, 1, true), GLASS_MAT);
+  shell.position.y = baseY + height / 2;
+  g.add(shell);
+  const lid = new THREE.Mesh(new THREE.CircleGeometry(radius, 40), GLASS_MAT);
+  lid.rotation.x = -Math.PI / 2;
+  lid.position.y = baseY + height;
+  g.add(lid);
+  [baseY + 0.045, baseY + height - 0.045].forEach(y => {
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius + 0.025, radius + 0.025, 0.07, 40, 1, true), BRASS_MAT);
+    rim.position.y = y;
+    g.add(rim);
+  });
+  for (let k = 0; k < 3; k++) {
+    const a = k / 3 * Math.PI * 2 + Math.PI / 2;
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.045, height, 0.045), BRASS_MAT);
+    post.position.set(Math.cos(a) * radius, baseY + height / 2, Math.sin(a) * radius);
+    post.castShadow = true;
+    g.add(post);
+  }
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.075, 20, 16), BRASS_MAT);
+  knob.position.y = baseY + height + 0.055;
+  g.add(knob);
+  return g;
+}
+
+/* ============================================================
+   展柜形制表 —— 一物一柜（第三单元 8 个展台）
+   本地坐标：X = 切向（柜体长边），+Z = 正对观众（朝八角厅圆心），y 从地面算。
+   柜型服从器物：袍 → 低倾角长条立柜 / 花篮 → 八边形地平柜
+                / 盘 → 圆形地平斜柜 / 帛书 → 长条斜面案 / 罐 → 方正立体柜
+   base:true 的柜型沿用「圆台底座 + 立柱」，地平柜直接落地。
+   lift = 文物最长边归一化尺寸；holderY = 文物底面落位；hit = 拾取代理 [r, h, 中心y]
+   ============================================================ */
+/* lift 取值依据 —— 8 个 .glb 的世界包围盒实测（`python tools/glb_info.py assets/models/*.glb`，
+   真读顶点缓冲算出来；根节点带 X 轴 90° 四元数，访问器 min/max 不是最终朝向，已换算）：
+     袍类   月白 0.658×1.183×0.392   石青 0.663×1.145×0.344
+            藕合 0.701×1.143×0.369   杏黄 0.643×1.163×0.299（均立姿，长边在 Y）
+     花篮   0.837 × 1.083 × 0.821（立姿）
+     罐     0.940 × 1.097 × 0.936（立姿）
+     盘     1.088 × 1.088 × 0.173（立着的一片盘）
+     帛书   0.654 × 0.146 × 1.086（平铺薄片，长边在进深方向 → 需绕 Y 转 90°）
+   8 件网格都是 3 万面（杏黄 29986），贴图统一压到 1024² JPEG（见 tools/shrink_glb.py） */
+/* plinth = 台座高度（第 19 轮）：地平四柜整体站上 PLINTH_H 的台座，参观者不必弯腰。
+   plaque = [展签柱脚 y, 柱脚 z]（第 20 轮）：柱脚落在柜子自己的石台/木底/圆台顶面上，
+            牌子就「嵌」在柜前；牌心统一抬到 PLAQUE_Y（见 makePlaque）。
+   ⚠️ 下面的 holderY / gazeY / hit / lightY 都是**台座之上的世界高度**（已把 +0.55 加进去）；
+      改 PLINTH_H 时这一整张表跟着重算，别只改 PLINTH_H。
+      改柜体尺寸时 plaque 的 z 要复核：柱脚必须在玻璃之外、且不越出台座/柜底的前沿
+      （几座柜子的余量只有 1~3cm，见 §7.7）。 */
+const CASE_SPEC = {
+  robe:   { lift:1.15, holderY:1.40, base:true,  plinth:0,    rot:[0, 0],         gazeY:2.00, hit:[1.15, 2.70, 1.35], plaque:[0.32, 0.80],  lightY:2.60 },
+  basket: { lift:0.80, holderY:0.93, base:false, plinth:0.55, rot:[0, 0],         gazeY:1.47, hit:[1.24, 1.80, 0.90], plaque:[0.65, 1.15],  lightY:2.55 },
+  dish:   { lift:0.80, holderY:0.77, base:false, plinth:0.55, rot:[0, 0],         gazeY:1.35, hit:[1.14, 1.55, 0.78], plaque:[0.55, 1.075], lightY:2.55 },
+  scroll: { lift:1.40, holderY:0.83, base:false, plinth:0.55, rot:[0, Math.PI/2], gazeY:1.20, hit:[1.27, 1.50, 0.75], plaque:[0.55, 0.555], lightY:2.45 },
+  jar:    { lift:1.05, holderY:0.93, base:false, plinth:0.55, rot:[0, 0],         gazeY:1.73, hit:[0.96, 2.05, 1.03], plaque:[0.55, 0.82],  lightY:2.55 }
+};
+const CASE_OF = {
+  yuebai: 'robe', shiqing: 'robe', ouhe: 'robe', xinghuang: 'robe',   // 4 件袍类（立姿）
+  songhua: 'basket', jilan: 'dish', canghuang: 'scroll', dailan: 'jar'
+};
+
+function glassPlane(w, h) { return new THREE.Mesh(new THREE.PlaneGeometry(w, h), GLASS_MAT); }
+function brassSq(w, h, d, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), BRASS_MAT);
+  m.position.set(x, y, z);
+  return m;
+}
+
+/* 长方体玻璃立柜：4 片立壁 + 顶盖（tilt>0 时正对观众那一边压低）+ 上下黄铜框 + 4 角柱。
+   顶盖低边正好压在墙顶，高边由背面两根加高角柱撑住（2*drop），斜面两侧的缝隙在玻璃下几乎不可见 */
+function glassBoxCase(w, d, y0, y1, tilt) {
+  const t = tilt || 0, g = new THREE.Group(), h = y1 - y0, cy = (y0 + y1) / 2;
+  const wall = (pw, ry, px, pz) => {
+    const m = glassPlane(pw, h); m.position.set(px, cy, pz); m.rotation.y = ry; g.add(m);
+  };
+  wall(w, 0, 0, d / 2);                    // 正面长壁
+  wall(w, Math.PI, 0, -d / 2);             // 背面长壁
+  wall(d, Math.PI / 2, w / 2, 0);          // 右短壁
+  wall(d, -Math.PI / 2, -w / 2, 0);        // 左短壁
+
+  const dLid = d * Math.cos(t) + 0.10;
+  const drop = (dLid / 2) * Math.sin(t);
+  const lid = glassPlane(w + 0.06, dLid);
+  lid.rotation.x = -Math.PI / 2 + t;
+  lid.position.y = y1 + 0.02 + drop;
+  g.add(lid);
+
+  [y0, y1].forEach(y => {                  // 上下黄铜框条
+    g.add(brassSq(w + 0.06, 0.055, 0.055, 0, y, d / 2), brassSq(w + 0.06, 0.055, 0.055, 0, y, -d / 2));
+    g.add(brassSq(0.055, 0.055, d + 0.06, w / 2, y, 0), brassSq(0.055, 0.055, d + 0.06, -w / 2, y, 0));
+  });
+  /* 4 根角柱：正面两根到墙顶，背面两根加高 2*drop 撑住顶盖高边 */
+  [[1, 1, 0], [-1, 1, 0], [1, -1, 2 * drop], [-1, -1, 2 * drop]].forEach(([sx, sz, extra]) => {
+    const post = brassSq(0.05, h + extra, 0.05, sx * w / 2, cy + extra / 2, sz * d / 2);
+    post.castShadow = true;
+    g.add(post);
+    if (extra) {                            // 加高的两根顶上补个顶珠，说明它是有意撑高的
+      const k = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), BRASS_MAT);
+      k.position.set(sx * w / 2, y1 + extra + 0.045, sz * d / 2);
+      g.add(k);
+    }
+  });
+  return g;
+}
+
+/* 袍类：低倾角长条形玻璃立柜（顶盖倾 10°，正面压低）。柜体 1.80 × 1.00，
+   四角半径 1.03 < 圆台顶面半径 1.05 → 整只柜子正好坐进原底座，不外挑 */
+function caseRobe() { return glassBoxCase(1.80, 1.00, 0.33, 2.66, 0.1745); }
+
+/* 通用落地石台：让地平柜有个实体基座（否则玻璃壁悬空、文物像浮在地板上） */
+const STONE_MAT = new THREE.MeshStandardMaterial({ color: '#e6e0d2', roughness: 0.6 });
+function stoneSlab(r, h) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), STONE_MAT);
+  m.position.y = h / 2; m.receiveShadow = true;
+  return m;
+}
+
+/* 罐类：方正立体独立柜（平顶，不倾） */
+function caseJar() {
+  const g = glassBoxCase(1.45, 1.45, 0.10, 1.45, 0);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.10, 1.55), STONE_MAT);
+  slab.position.y = 0.05; slab.receiveShadow = true;
+  g.add(slab);
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.28, 0.62), STONE_MAT);
+  plinth.position.y = 0.24; plinth.receiveShadow = true;   // 顶面 0.38 = holderY
+  g.add(plinth);
+  return g;
+}
+
+/* 花篮：八边形地平独立柜。thetaStart=π/8 让一个平面正对观众（+Z），
+   4 根铜柱落在八边形的交替顶点上 */
+function caseBasket() {
+  const R = 1.15, y0 = 0.10, y1 = 1.20, g = new THREE.Group();
+  const oct = (r, hh, open) => new THREE.CylinderGeometry(r, r, hh, 8, 1, open, Math.PI / 8);
+  const shell = new THREE.Mesh(oct(R, y1 - y0, true), GLASS_MAT);
+  shell.position.y = (y0 + y1) / 2;
+  g.add(shell);
+  const lid = new THREE.Mesh(oct(R, 0.03, false), GLASS_MAT);
+  lid.position.y = y1 + 0.02;
+  g.add(lid);
+  [y0, y1].forEach(y => {
+    const rim = new THREE.Mesh(oct(R + 0.03, 0.06, true), BRASS_MAT);
+    rim.position.y = y;
+    g.add(rim);
+  });
+  [0, 2, 4, 6].forEach(k => {
+    const th = Math.PI / 8 + k * Math.PI / 4;
+    const post = brassSq(0.05, y1 - y0, 0.05, Math.sin(th) * R, (y0 + y1) / 2, Math.cos(th) * R);
+    post.castShadow = true;
+    g.add(post);
+  });
+  const plinth = new THREE.Mesh(oct(0.5, 0.28, false), STONE_MAT);
+  plinth.position.y = y0 + 0.14; plinth.receiveShadow = true;   // 顶面 0.38 = holderY
+  g.add(plinth);
+  g.add(stoneSlab(1.20, y0));                                   // 落地石台，柜体不再悬空
+  return g;
+}
+
+/* 盘：带倾角的圆形地平斜柜。圆筒矮柜 + 圆顶盖倾 10°（正面压低，背面两根铜柱撑高边） */
+function caseDish() {
+  const R = 1.00, y0 = 0.10, y1 = 0.85, TILT = 0.1745, g = new THREE.Group();   // 10°
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, y1 - y0, 48, 1, true), GLASS_MAT);
+  shell.position.y = (y0 + y1) / 2;
+  g.add(shell);
+  const dLid = 2 * R + 0.08, drop = (dLid / 2) * Math.sin(TILT);
+  const lid = new THREE.Mesh(new THREE.CircleGeometry(dLid / 2, 48), GLASS_MAT);
+  lid.rotation.x = -Math.PI / 2 + TILT;
+  lid.position.y = y1 + 0.02 + drop;
+  g.add(lid);
+  [y0, y1].forEach(y => {
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.06, 48, 1, true), BRASS_MAT);
+    rim.position.y = y;
+    g.add(rim);
+  });
+  [-1, 1].forEach(sx => {
+    const post = brassSq(0.05, (y1 - y0) + 2 * drop, 0.05, sx * R * 0.7, (y0 + y1) / 2 + drop, -R * 0.7);
+    post.castShadow = true;
+    g.add(post);
+  });
+  g.add(stoneSlab(R + 0.05, y0));                 // 落地石台
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 48), STONE_MAT);
+  plinth.position.y = 0.16; plinth.receiveShadow = true;   // 顶面 0.22 = holderY（盘立其上）
+  g.add(plinth);
+  return g;
+}
+
+/* 帛书：长条斜面展柜。直角梯形截面（正面矮 0.45、背面高 0.90），顶面即斜面 25°，
+   配木底板与木前后沿（帛书配木案更贴切） */
+function caseScroll() {
+  const W = 2.20, D = 0.95, y0 = 0.12, yF = 0.45, yB = 0.90, g = new THREE.Group();
+  const fw = glassPlane(W, yF - y0); fw.position.set(0, (y0 + yF) / 2, D / 2); g.add(fw);
+  const bw = glassPlane(W, yB - y0); bw.position.set(0, (y0 + yB) / 2, -D / 2); g.add(bw);
+  /* 两侧梯形玻璃壁：Shape 造形在 XY 面（X 当进深），绕 Y 旋 -90° 立起来 */
+  const sh = new THREE.Shape();
+  sh.moveTo(D / 2, y0); sh.lineTo(D / 2, yF); sh.lineTo(-D / 2, yB); sh.lineTo(-D / 2, y0); sh.closePath();
+  const sg = new THREE.ShapeGeometry(sh);
+  [-1, 1].forEach(sx => {
+    const m = new THREE.Mesh(sg, GLASS_MAT); m.rotation.y = -Math.PI / 2; m.position.x = sx * W / 2; g.add(m);
+  });
+  /* 斜面顶盖 */
+  const top = glassPlane(W + 0.06, Math.hypot(D, yB - yF) + 0.06);
+  top.rotation.x = -Math.PI / 2 + Math.atan2(yB - yF, D);
+  top.position.set(0, (yF + yB) / 2 + 0.02, 0);
+  g.add(top);
+  /* 木底板 + 木前后沿 + 铜包角柱 */
+  const base = new THREE.Mesh(new THREE.BoxGeometry(W + 0.12, 0.12, D + 0.08), WOOD_MAT);
+  base.position.y = y0 / 2; base.receiveShadow = true; g.add(base);
+  [[D / 2, yF], [-D / 2, yB]].forEach(([pz, py]) => {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(W + 0.12, 0.10, 0.07), WOOD_MAT);
+    rail.position.set(0, py - 0.05, pz); rail.castShadow = true; g.add(rail);
+  });
+  [[1, D / 2, yF], [-1, D / 2, yF], [1, -D / 2, yB], [-1, -D / 2, yB]].forEach(([sx, pz, py]) => {
+    const post = brassSq(0.05, py - y0, 0.05, sx * W / 2, (y0 + py) / 2, pz);
+    post.castShadow = true; g.add(post);
+  });
+  /* 柜内木展板（帛书平铺其上） */
+  const board = new THREE.Mesh(new THREE.BoxGeometry(W - 0.30, 0.16, D - 0.33), WOOD_MAT);
+  board.position.y = y0 + 0.08; board.receiveShadow = true;   // 顶面 0.28 = holderY
+  g.add(board);
+  return g;
+}
+
+/* ---------- 台座：把四座地平柜整体升到腰高（2026-10-12 第 19 轮）----------
+   原本四座柜直接落地、文物贴在柜底（底面只有 22~38cm），参观者得弯腰看。
+   现在整柜站上一座 0.55m 高的台座，柜型（八边形 / 圆形 / 长条斜面案 / 方正）
+   一个都不改，只是从「落地」变成「上台」。
+   台座取须弥座式的三段（下枋─束腰─上枋），**束腰刻云龙纹**。
+   「不要太张扬」的做法：纹样是同色系浅刻——色彩对比压到极低（#c3baa7 on #cfc7b6），
+   起伏只有 2cm 级的 bump；远看只是一个素净台座，走近才看得出云头和龙首。 */
+
+/* 云头：两瓣卷云 + 云尾（如意云纹的骨架） */
+function cloudHead(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.arc(x - s * 0.34, y, s * 0.6, Math.PI * 0.35, Math.PI * 1.9);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + s * 0.36, y - s * 0.1, s * 0.46, Math.PI * 1.05, Math.PI * 0.72);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - s * 0.72, y + s * 0.5);
+  ctx.quadraticCurveTo(x, y + s * 0.96, x + s * 0.78, y + s * 0.42);
+  ctx.stroke();
+}
+/* 龙首：侧面龙（颈─首─吻─角─目─须），比画整条龙稳，缩小后也能认出是龙 */
+function dragonHead(ctx, x, y, s) {
+  ctx.beginPath();                                   // 龙颈
+  ctx.moveTo(x - s * 0.6, y + s * 0.55);
+  ctx.quadraticCurveTo(x - s * 0.2, y + s * 0.12, x + s * 0.1, y - s * 0.05);
+  ctx.stroke();
+  ctx.beginPath();                                   // 头 + 吻
+  ctx.moveTo(x - s * 0.12, y - s * 0.16);
+  ctx.quadraticCurveTo(x + s * 0.24, y - s * 0.46, x + s * 0.6, y - s * 0.2);
+  ctx.quadraticCurveTo(x + s * 0.86, y - s * 0.04, x + s * 0.68, y + s * 0.14);
+  ctx.quadraticCurveTo(x + s * 0.42, y + s * 0.32, x + s * 0.08, y + s * 0.16);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();                                   // 角
+  ctx.moveTo(x + s * 0.06, y - s * 0.3);
+  ctx.quadraticCurveTo(x - s * 0.12, y - s * 0.76, x - s * 0.48, y - s * 0.68);
+  ctx.stroke();
+  ctx.beginPath();                                   // 目
+  ctx.arc(x + s * 0.34, y - s * 0.07, s * 0.075, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();                                   // 须
+  ctx.moveTo(x + s * 0.66, y + s * 0.11);
+  ctx.quadraticCurveTo(x + s * 1.0, y + s * 0.36, x + s * 0.58, y + s * 0.62);
+  ctx.stroke();
+}
+
+function paintMotif(ctx, W, H, paper, ink) {
+  ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = ink; ctx.lineCap = 'round';
+  ctx.lineWidth = 3;                                 // 束腰上下弦线
+  [86, 170].forEach(y => { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); });
+  ctx.lineWidth = 4;
+  for (let i = 0; i < 8; i++) {                      // 云头与龙首相间
+    const x = 32 + i * 64, y = 128;
+    if (i % 2) dragonHead(ctx, x, y, 20); else cloudHead(ctx, x, y, 22);
+  }
+}
+const PLINTH_H = 0.55;
+/* 台座材质按「横向重复数」缓存（只有 2 和 3 两种）。
+   ⚠️ 别用 MOTIF_TEX.clone() 省事：three r152+ 按 source 共享同一张 WebGL 贴图，
+      而 map(sRGB) 与 bumpMap(线性) 的 colorSpace 不同，共用会互相覆盖内部格式。
+      各自 canvasTex() 生成一张最稳，两张 512×256 也就几十 KB。 */
+const motifCache = {};
+function motifMat(rx) {
+  if (!motifCache[rx]) {
+    const map = canvasTex(512, 256, (c, w, h) => paintMotif(c, w, h, '#cfc7b6', '#c3baa7'));
+    const bumpMap = canvasTex(512, 256, (c, w, h) => paintMotif(c, w, h, '#ffffff', '#000000'));
+    bumpMap.colorSpace = THREE.NoColorSpace;         // bumpMap 是数据贴图，不能当颜色
+    map.wrapS = bumpMap.wrapS = THREE.RepeatWrapping;
+    map.repeat.set(rx, 1); bumpMap.repeat.set(rx, 1);
+    motifCache[rx] = new THREE.MeshStandardMaterial({
+      color: '#cfc7b6', roughness: 0.62,
+      map, bumpMap, bumpScale: 0.02
+    });
+  }
+  return motifCache[rx];
+}
+
+const PLINTH_FOOT = {          // [台座平面尺寸 W × D, 纹样横向重复数]
+  basket: [2.40, 2.40, 3], dish: [2.20, 2.20, 3],
+  scroll: [2.46, 1.16, 3], jar: [1.84, 1.84, 2]
+};
+function buildPedestal(kind) {
+  const [W, D, rx] = PLINTH_FOOT[kind];
+  const g = new THREE.Group();
+  const capH = 0.06, shaftH = PLINTH_H - capH * 2;   // 0.43
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(W, capH, D), STONE_MAT);
+  cap.position.y = capH / 2; cap.receiveShadow = cap.castShadow = true; g.add(cap);
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(W - 0.16, shaftH, D - 0.16), motifMat(rx));
+  shaft.position.y = capH + shaftH / 2;
+  shaft.receiveShadow = shaft.castShadow = true;
+  g.add(shaft);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(W, capH, D), STONE_MAT);
+  top.position.y = PLINTH_H - capH / 2; top.receiveShadow = top.castShadow = true; g.add(top);
+  return g;                                          // 顶面正好 PLINTH_H
+}
+
+function buildCase(kind) {
+  switch (kind) {
+    case 'robe':   return caseRobe();
+    case 'basket': return caseBasket();
+    case 'dish':   return caseDish();
+    case 'scroll': return caseScroll();
+    default:       return caseJar();
+  }
+}
+
+/* ---------- 展台 ---------- */
 const exhibits = [];
 const loader = new GLTFLoader();
-const texLoader = new THREE.TextureLoader();
-const MODEL_IDS = ['jilan', 'songhua', 'dailan', 'canghuang'];
+const MODEL_IDS = ['jilan', 'yuebai', 'songhua', 'shiqing', 'ouhe', 'canghuang', 'dailan', 'xinghuang'];
 let loaded = 0;
 
+/* 点击拾取用的不可见代理碰撞体。
+   不对 .glb 模型本身体做射线检测——8 个模型各约 3 万面，
+   逐帧 pointermove 检测会卡；用圆柱代理一次覆盖整件展品。
+   已核实 three@0.160.0：Raycaster 只查 object.layers，
+   不看 material.visible，故「不渲染但可命中」成立。 */
+const hitboxes = [];
+
+/* 共享中文衬线串 + 展签牌尺寸。
+   ⚠️ 必须声明在展台循环（下面 100 行内）之前 —— 循环是模块顶层直接跑的，
+   放到后面会 TDZ 白屏（`const` 不提升）。这几个常量就踩过一次，别再挪下去。 */
+const CJK = '"Songti SC","STSong","SimSun","Noto Serif SC",serif';
+const PLAQUE_Y = 1.00;                 // 展签牌心高度（8 座统一，抬手可读）
+const PLAQUE_TILT = 0.52;              // ≈30°：顶边向后倒（讲台式）
+const PLAQUE_W = 0.66, PLAQUE_H = 0.248;   // 512:192 = 8:3
+
 COLORS.forEach((c, i) => {
+  const kind = CASE_OF[c.id];
+  const spec = CASE_SPEC[kind];
   const a = (i / COLORS.length) * Math.PI * 2;
   const x = Math.cos(a) * STAND_R, z = Math.sin(a) * STAND_R;
   const grp = new THREE.Group();
   grp.position.set(x, 0, z);
   grp.lookAt(0, 0, 0);
 
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.05, 1.25, 0.32, 48),
-    new THREE.MeshStandardMaterial({ color:'#efe9db', roughness:0.5 })
-  );
-  base.position.y = 0.16; base.castShadow = base.receiveShadow = true;
-  grp.add(base);
-  const halo = new THREE.Mesh(
-    new THREE.RingGeometry(1.3, 1.42, 48),
-    new THREE.MeshBasicMaterial({ color:c.hex, side:THREE.DoubleSide })
-  );
-  halo.rotation.x = -Math.PI/2; halo.position.y = 0.02;
-  grp.add(halo);
-  // 器物（有 GLB 的）立在细立柱上；袍服体量大，直接站在白色展台面上，
-  // 否则一件大袍子顶在细杆上会变成「蘑菇插杆」
-  const isGarment = !MODEL_IDS.includes(c.id);
-  if (!isGarment) {
+  /* 圆台底座 + 立柱：只有立柜型（袍类）保留；地平四柜改站台座（见 buildPedestal） */
+  if (spec.base) {
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.05, 1.25, 0.32, 48),
+      new THREE.MeshStandardMaterial({ color:'#efe9db', roughness:0.5 })
+    );
+    base.position.y = 0.16; base.castShadow = base.receiveShadow = true;
+    grp.add(base);
     const pillar = new THREE.Mesh(
       new THREE.CylinderGeometry(0.15, 0.18, 1.05, 32),
       new THREE.MeshStandardMaterial({ color:'#5a5245', roughness:0.5 })
@@ -501,68 +1228,152 @@ COLORS.forEach((c, i) => {
     pillar.position.y = 0.85; pillar.castShadow = true;
     grp.add(pillar);
   }
+  /* 色环 / 悬停环：地平四柜整柜抬上了台座（足印最大到对角 1.70），
+     环必须退到台座投影之外，否则会被台座整个盖住（也就不再共面闪烁） */
+  const haloR = spec.plinth ? [1.80, 1.98] : [1.30, 1.42];
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(haloR[0], haloR[1], 48),
+    new THREE.MeshBasicMaterial({ color:c.hex, side:THREE.DoubleSide })
+  );
+  halo.rotation.x = -Math.PI/2; halo.position.y = 0.02;
+  grp.add(halo);
 
-  // 展台信息牌（色名，Sprite 用 canvas）
-  const sprite = makeLabel(c.name);
-  sprite.position.set(0, 0.55, 1.15);
-  grp.add(sprite);
+  /* 定制展柜（一物一柜，见 CASE_SPEC）；地平四柜整柜抬上台座（见 buildPedestal） */
+  const cs = buildCase(kind);
+  cs.position.y = spec.plinth;
+  grp.add(cs);
+  if (spec.plinth) grp.add(buildPedestal(kind));
 
-  // 氛围光
+  /* 悬停高亮环（默认隐藏）：套在色环外面一圈 */
+  const pickRing = new THREE.Mesh(
+    new THREE.RingGeometry(haloR[1] + 0.08, haloR[1] + 0.30, 48),
+    new THREE.MeshBasicMaterial({ color:c.hex, side:THREE.DoubleSide, transparent:true, opacity:0.85 })
+  );
+  pickRing.rotation.x = -Math.PI/2; pickRing.position.y = 0.03;
+  pickRing.visible = false;
+  grp.add(pickRing);
+
+  /* 实物展签：黄铜柱立在柜前、牌面 30° 斜置（见 makePlaque） */
+  grp.add(makePlaque(c, i, spec.plaque));
+
   const pl = new THREE.PointLight(c.hex, 1.4, 10, 2);
-  pl.position.set(0, 2.6, 0.5);
+  pl.position.set(0, spec.lightY, 0.5);
   grp.add(pl);
 
   scene.add(grp);
 
-  // 袍服站在展台面（0.32）上，器物站在立柱顶面（STAND_TOP）上
-  const holderY = isGarment ? 0.32 : STAND_TOP;
   const holder = new THREE.Group();
-  holder.position.set(x, holderY, z);
-  holder.lookAt(0, holderY, 0);
+  holder.position.set(x, spec.holderY, z);
+  holder.lookAt(0, spec.holderY, 0);
   scene.add(holder);
 
-  exhibits.push({ c, i, grp, holder, a, x, z });
+  /* 代理碰撞体：罩住整座展柜，参数随柜型（见 CASE_SPEC.hit） */
+  const hb = new THREE.Mesh(
+    new THREE.CylinderGeometry(spec.hit[0], spec.hit[0], spec.hit[1], 12),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  hb.position.set(x, spec.hit[2], z);
+  hb.userData.idx = i;
+  hb.userData.kind = 'stand';
+  scene.add(hb);
+  hitboxes.push(hb);
+
+  exhibits.push({ c, i, grp, holder, a, x, z, pickRing, spec });
 });
 
+/* 第三单元 8 座展台建完之后再挂标题带：CJK 是 const，声明在第 1202 行，
+   模块自上而下求值 —— 挂在 785 行的八角墙那段会撞进 CJK 的暂时性死区，
+   `${CJK}` 抛 ReferenceError 把整个模块带走（白屏）。展牌一律挂在 CJK 之后。 */
+/* 第三单元标题带 —— 与第一/第二/第四单元同款（5.6×1.2、深底金字、y=3.4）。
+   八边形的门洞开在**顶点**上（90° 与 270°，即 ±Z 那两个角，各 ±0.13rad≈3.63m 净宽），
+   所以只切到相邻的 i=1,2 与 i=5,6 四个面；**完整实墙面有四条**：
+   中心角 22.5° / 157.5° / 202.5° / 337.5°（即四条对角面）。取 337.5°（东北对角面）。
+   放得下：真八边形弦长 2·14·sin22.5° = 10.72m（代码实画平面宽 2·14·tan22.5° = 11.60m），
+   5.6m 的带子每侧还剩约 2.5m 才到面交线。
+   半径取 MUSE_R − 0.04 = 13.96：墙面在 R=14 且法线朝圆心，**往圆心挪一点才是正面**，
+   0.04 与 u1(−18.85/−18.89)、u2(−6.35/−6.39)、u4(18.35/18.39) 是同一个贴面间隙。
+   rotY = −mid − π/2 让板面法线指向圆心；要改挂镜像那条 202.5° 面，用 (−12.90, 3.4, −5.34, +1.1781)。 */
+plate(textBoardTex({ w:1024, h:220, bg:'#2a241b', fg:'#e8cf94', title:UNITS.u3.cn,
+  sub:UNITS.u3.en, titleSize:60, align:'center' }),
+  5.6, 1.2, 12.90, 3.4, -5.34, -1.1781);
+
+
 /* canvas 文字标签 */
-function makeLabel(text) {
+/* ---------- 展签牌（第 20 轮）----------
+   原来是一块 Sprite 广告牌：永远转向镜头、depthTest:false 还能穿墙，一眼假。
+   现在改成**实物展签**——象牙色卡纸 + 黄铜背板，30° 斜置在展柜正前方的
+   细铜柱上（柱脚落在柜子的石台/木底上，像拧上去的展签夹），跟真博物馆一样。
+   倾角 30° 是按读牌几何定的：参观者眼高 1.7m、被 `blockers` 挡在柜心 1.7m 外，
+   牌心抬到 1.00m 时视线俯角约 16°~52°，牌面法线朝上外 30° 正好落在视线的±26° 内，
+   抬手即可读 —— 不用弯腰。
+   （PLAQUE_* 四个常量声明在展台循环之前，见上文 `const CJK` 处的说明。） */
+
+function makePlaque(c, idx, anchor) {
+  const g = new THREE.Group();
   const cv = document.createElement('canvas');
-  cv.width = 256; cv.height = 96;
+  cv.width = 512; cv.height = 192;
   const ctx = cv.getContext('2d');
-  ctx.font = 'bold 52px "Songti SC","SimSun",serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(20,18,14,0.85)';
-  ctx.fillRect(0, 8, 256, 80);
-  ctx.fillStyle = '#f2ead6';
-  ctx.fillText(text, 128, 52);
+  /* 馆签：象牙卡纸 + 双细线框 */
+  ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, 512, 192);
+  ctx.strokeStyle = 'rgba(92,78,50,0.55)'; ctx.lineWidth = 3; ctx.strokeRect(9, 9, 494, 174);
+  ctx.strokeStyle = 'rgba(92,78,50,0.25)'; ctx.lineWidth = 1; ctx.strokeRect(16, 16, 480, 160);
+  /* 左边一块标本本色 */
+  ctx.fillStyle = c.hex; ctx.fillRect(30, 48, 52, 96);
+  ctx.strokeStyle = 'rgba(60,50,32,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(30, 48, 52, 96);
+  /* 色名 + 色值 + 编号 */
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#241f16';
+  ctx.font = `bold 76px ${CJK}`;
+  ctx.fillText(c.name, 102, 118);
+  ctx.fillStyle = '#6d6148';
+  ctx.font = '28px ui-monospace,Consolas,monospace';
+  ctx.fillText(c.hex.toUpperCase(), 104, 156);
+  ctx.textAlign = 'right';
+  ctx.fillText('NO.' + String(idx + 1).padStart(2, '0'), 476, 60);
+
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest:false }));
-  sp.scale.set(1.5, 0.56, 1);
-  return sp;
+  tex.anisotropy = 4;
+  /* 牌面 + 黄铜背板（有厚度才像一块实物） */
+  const board = new THREE.Group();
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(PLAQUE_W, PLAQUE_H),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.74 }));
+  const back = new THREE.Mesh(
+    new THREE.BoxGeometry(PLAQUE_W + 0.026, PLAQUE_H + 0.026, 0.016), BRASS_MAT);
+  back.position.z = -0.011;
+  card.castShadow = back.castShadow = true;
+  back.receiveShadow = true;
+  board.add(back, card);
+  board.rotation.x = -PLAQUE_TILT;                 // 顶边后倒
+  board.position.y = PLAQUE_Y - anchor[0];         // 牌心统一抬到 PLAQUE_Y
+  g.add(board);
+  /* 立柱：柱脚坐在柜子的石台/木底上（柱脚落在 anchor 的 y、z） */
+  const postH = PLAQUE_Y - anchor[0];
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, postH, 12), BRASS_MAT);
+  post.position.y = postH / 2; post.castShadow = true;
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, 0.016, 16), BRASS_MAT);
+  collar.position.y = 0.008;
+  g.add(post, collar);
+  g.position.set(0, anchor[0], anchor[1]);
+  return g;
 }
 
-/* ============ 加载模型 ============ */
-const lpEl = document.getElementById('lp');
+/* ---------- 加载模型 ---------- */
+const loadingBar = document.getElementById('lp');
 const loadingEl = document.getElementById('loading');
 
-// 统一收口：每件藏品无论成功或失败都必须走 tick，
-// 否则 loaded 永远到不了 8，加载页会一直卡在那里（黑屏）。
-function tick(e, ok) {
-  if (!ok) window.__museumState.failed.push(e.c.name);
+function settle() {
   loaded++;
-  lpEl.textContent = loaded + ' / ' + COLORS.length;
-  if (loaded >= COLORS.length) {
-    if (window.__museumState.failed.length) {
-      console.warn('[博物馆] 以下藏品 3D 模型加载失败，已用占位展品代替：'
-        + window.__museumState.failed.join('、'));
-    }
-    setTimeout(() => loadingEl.classList.add('hide'), 400);
-  }
+  loadingBar.textContent = loaded + ' / ' + COLORS.length;
+  if (loaded >= COLORS.length) setTimeout(() => loadingEl.classList.add('hide'), 400);
 }
 
-// 没有 GLB 时，用程序化建模做一件该色的清式袍服。
-// 局部坐标约定：y = 0 是下摆底边，模型朝 +z 为正面（挂点 lookAt 中心，故正面朝向观众）。
+/* ---------- 程序化袍服（4 件袍类 .glb 加载失败时的降级物）----------
+   assets/models/ 现已 8 件齐全，四件**袍类**（月白 / 石青 / 藕合 / 杏黄）走真模型；
+   这里只在 .glb 取不到时兜底 —— 与新设计里的 fallbackStand()（一块立在杆上的平板）
+   相比，用 lathe 旋成型的袍子有立姿、肩线、立领、外展袖、胸前补子，
+   塞进 `robe` 立柜里才像话。
+   局部坐标：y=0 是下摆底边，朝 +z 为正面（挂点 lookAt 中心，故正面朝向观众）。 */
 function buildGarment(hex) {
   const g = new THREE.Group();
   const cloth = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.72, metalness: 0.02, side: THREE.DoubleSide });
@@ -619,88 +1430,1919 @@ function buildGarment(hex) {
   return g;
 }
 
-// 把任意模型归一化后「底面对齐」摆到展台面上
-function placeOnStand(obj) {
+/* 把程序化袍服按 `lift` 归一化并**贴底居中** —— 与 loadModel 里真模型的算式逐字一致。
+   ⚠️ 不能省掉「重新量一次包围盒」这一步：袍子是 lathe + 分组转出来的，
+   长边不一定落在 Y 上，用 lift/2 估会浮空。 */
+function fitRobe(obj, lift) {
   const box = new THREE.Box3().setFromObject(obj);
   const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  const scale = DISPLAY_SIZE / maxDim;
-  obj.scale.setScalar(scale);
-  // 水平居中；垂直方向对齐「包围盒底面」而不是几何中心 —— 原实现用中心对齐，
-  // 只有 y 向恰好是最大尺寸的器物（瓶/盘/篮）才碰巧落在台面上，
-  // 扁平的帛书最大尺寸在长度方向，于是被顶到半空悬着。
-  obj.position.set(
-    -center.x * scale,
-    -box.min.y * scale + 0.008,   // 8mm 抬升，避免与立柱顶面 z-fighting
-    -center.z * scale
-  );
+  obj.scale.setScalar(lift / maxDim);
+  obj.position.set(0, 0, 0);
+  const box2 = new THREE.Box3().setFromObject(obj);
+  const c2 = box2.getCenter(new THREE.Vector3());
+  obj.position.set(-c2.x, -box2.min.y, -c2.z);
   return obj;
+}
+
+/* 加载失败时的分派：立柜（袍类）给程序化袍服，其余柜型沿用 fallbackStand 占位。
+   8 件 .glb 现已全部就位，这条路径正常参观走不到 —— 但拔了 assets/models/ 也别空展台 */
+function modelFallback(e) {
+  return CASE_OF[e.c.id] === 'robe'
+    ? fitRobe(buildGarment(e.c.hex), e.spec.lift)
+    : fallbackStand(e.c.hex, e.spec.lift);
+}
+
+/* 占位展品：模型缺失或加载失败时降级，保证展台仍可点击。
+   lift 与真模型同口径归一化，地平柜里的占位物才不会顶出柜顶 */
+function fallbackStand(hex, lift) {
+  const g = new THREE.Group();
+  const frameMat = new THREE.MeshStandardMaterial({ color:'#5a5245', roughness:0.5 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.95, 16), frameMat);
+  pole.position.y = 0.475;
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.05, 16), frameMat);
+  bar.rotation.z = Math.PI/2; bar.position.y = 0.95;
+  const cloth = new THREE.Mesh(
+    new THREE.BoxGeometry(0.85, 0.8, 0.15),
+    new THREE.MeshStandardMaterial({ color:hex, roughness:0.6 })
+  );
+  cloth.position.y = 0.42; cloth.castShadow = true;
+  g.add(pole, bar, cloth);
+  g.scale.setScalar((lift || 1.15) / 1.15);
+  return g;
 }
 
 function loadModel(e) {
   if (!MODEL_IDS.includes(e.c.id)) {
-    e.holder.add(placeOnStand(buildGarment(e.c.hex)));
-    tick(e, true);
+    e.holder.add(modelFallback(e));
+    settle();
     return;
   }
   loader.load(`assets/models/${e.c.id}.glb`, (gltf) => {
     const m = gltf.scene;
-    placeOnStand(m);
+    m.rotation.set(e.spec.rot[0], e.spec.rot[1], 0);   // 先摆正（帛书平铺，长边要转到柜长方向）
+    const box = new THREE.Box3().setFromObject(m);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const scale = e.spec.lift / maxDim;          // 文物尺寸随柜型适配（见 CASE_SPEC.lift）
+    m.scale.setScalar(scale);
+    /* 缩放后重新量一次，按包围盒底面贴合 holder 原点。
+       ⚠️ 不能用 lift/2 顶替 —— 长边不在 Y 上时（帛书是平铺薄片）会浮在半空 */
+    m.position.set(0, 0, 0);
+    const box2 = new THREE.Box3().setFromObject(m);
+    const c2 = box2.getCenter(new THREE.Vector3());
+    m.position.set(-c2.x, -box2.min.y, -c2.z);
     m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     e.holder.add(m);
-    tick(e, true);
-  }, undefined, (err) => {
-    // 原来是空回调 () => {}，模型一旦加载失败 loaded 就不再增加，加载页永远不消失
-    console.warn(`[博物馆] ${e.c.id}.glb 加载失败，改用程序化袍服：`, err);
-    e.holder.add(placeOnStand(buildGarment(e.c.hex)));
-    tick(e, false);
+    settle();
+  }, undefined, () => {
+    /* ⚠️ 失败也必须计数，否则 #loading 遮罩永久停留（且合并后会同时挡住卷轴视图） */
+    console.warn(`[传统古色] 模型加载失败，已降级为${CASE_OF[e.c.id] === 'robe' ? '程序化袍服' : '占位展品'}：assets/models/${e.c.id}.glb`);
+    e.holder.add(modelFallback(e));
+    settle();
   });
 }
 exhibits.forEach(loadModel);
 
-// 最终保险：即使模型再慢或彻底失败，30 秒后也一定放人进展厅
-setTimeout(() => loadingEl.classList.add('hide'), 30000);
+/* ============================================================
+   1.5 展陈空间：序厅 / 内厅 / 第一・第四单元 / 室外
+   俯视布局（+Z 为南，参观起点在馆外南侧甬道）：
+                      ┌───────────────────┐
+                      │  第四单元 · 感知   │
+         ┌────────────┤   内厅（第二单元） ├───────────┐
+         │ 第一单元    ├─────────┬──────────┤           │
+         │ 色源·万物生 │ 八角主厅（第三单元）│           │
+         └────────────┤        ◉           ├───────────┘
+                      ├─────────┴──────────┤
+                      │    序厅（入口）     │
+                      └──────────┬─────────┘
+                            ● 甬道 · 起点
+   ============================================================ */
 
-/* ============ 导航 ============ */
-const dotsBox = document.getElementById('dots');
+function canvasTex(w, h, draw) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  draw(cv.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+/* canvas 没有自动换行：中文按字符贪心断行 */
+function wrapCJK(ctx, text, maxW) {
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    if (!raw.trim()) { out.push(''); continue; }
+    let line = '';
+    for (const ch of raw) {
+      if (line && ctx.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
+      else line += ch;
+    }
+    out.push(line);
+  }
+  return out;
+}
+/* 展板：标题 + 正文 */
+function textBoardTex(o) {
+  const { w = 1024, h = 640, bg = '#efe6d2', fg = '#2f2a1e', title = '', sub = '',
+          body = '', titleSize = 56, bodySize = 29, align = 'left' } = o;
+  return canvasTex(w, h, (ctx, W, H) => {
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 4; ctx.strokeRect(16, 16, W-32, H-32);
+    ctx.fillStyle = fg;
+    ctx.textAlign = align === 'center' ? 'center' : 'left';
+    const x0 = align === 'center' ? W/2 : 56;
+    let y = 0;
+    if (title) {
+      ctx.font = `bold ${titleSize}px ${CJK}`;
+      y = titleSize + 42;
+      ctx.fillText(title, x0, y);
+      y += 18;
+      if (sub) {
+        ctx.font = `${Math.round(titleSize*0.34)}px monospace`;
+        ctx.globalAlpha = 0.6; ctx.fillText(sub, x0, y + 6); ctx.globalAlpha = 1;
+        y += 26;
+      }
+      ctx.strokeStyle = 'rgba(90,75,45,0.35)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(56, y + 12); ctx.lineTo(W - 56, y + 12); ctx.stroke();
+      y += 34;
+    }
+    if (body) {
+      ctx.font = `${bodySize}px ${CJK}`;
+      const lh = Math.round(bodySize * 1.85);
+      wrapCJK(ctx, body, W - 112).forEach(ln => { y += lh; ctx.fillText(ln, x0, y); });
+    }
+  });
+}
+/* 门楣/标题带：深底金字，字号自适应 */
+function bandTex(title, sub, W = 1024, H = 220) {
+  return canvasTex(W, H, (ctx, w, h) => {
+    ctx.fillStyle = '#2a241b'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(232,207,148,0.5)'; ctx.lineWidth = 5; ctx.strokeRect(12, 12, w-24, h-24);
+    ctx.fillStyle = '#e8cf94'; ctx.textAlign = 'center';
+    let fs = 84;
+    ctx.font = `bold ${fs}px ${CJK}`;
+    while (ctx.measureText(title).width > w - 80 && fs > 22) {
+      fs -= 4; ctx.font = `bold ${fs}px ${CJK}`;
+    }
+    ctx.fillText(title, w/2, sub ? 118 : h/2 + fs*0.35);
+    if (sub) {
+      ctx.font = '26px monospace'; ctx.fillStyle = 'rgba(232,207,148,0.6)';
+      ctx.fillText(sub, w/2, 172);
+    }
+  });
+}
+function plate(tex, pw, ph, x, y, z, rotY = 0, rotX = 0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph),
+    new THREE.MeshBasicMaterial({ map: tex }));
+  m.position.set(x, y, z); m.rotation.y = rotY; m.rotation.x = rotX;
+  scene.add(m);
+  return m;
+}
+
+/* ---------- 展厅壳体 ---------- */
+function buildWallSide(dir, cx, cz, w, d, h, mat, doors) {
+  const isX = (dir === '+z' || dir === '-z');
+  const fixedAt = dir === '+z' ? cz + d/2 : dir === '-z' ? cz - d/2
+                : dir === '+x' ? cx + w/2 : cx - w/2;
+  const center = isX ? cx : cz, len = isX ? w : d;
+  const holes = doors.filter(o => o.side === dir).map(o => [o.at - o.half, o.at + o.half]);
+  const g = new THREE.Group();
+  solidSpans(center - len/2, center + len/2, holes).forEach(([a, b]) => {
+    const m = new THREE.Mesh(
+      isX ? new THREE.BoxGeometry(b - a, h, WALL_T) : new THREE.BoxGeometry(WALL_T, h, b - a), mat);
+    m.position.set(isX ? (a + b)/2 : fixedAt, h/2, isX ? fixedAt : (a + b)/2);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+  });
+  doors.filter(o => o.side === dir).forEach(o => {
+    const top = o.top || 3.1, ph = h - top;
+    if (ph <= 0.01) return;
+    const m = new THREE.Mesh(
+      isX ? new THREE.BoxGeometry(o.half*2, ph, WALL_T) : new THREE.BoxGeometry(WALL_T, ph, o.half*2), mat);
+    m.position.set(isX ? o.at : fixedAt, (h + top)/2, isX ? fixedAt : o.at);
+    g.add(m);
+  });
+  return g;
+}
+function buildRoom(o) {
+  const { cx, cz, w, d, h = WALL_H, doors = [], omit = [], wall = WALL_C,
+          floor = FLOOR_C, ceil = CEIL_C, lamp = true, roof = true } = o;
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: wall, roughness: 0.94 });
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
+    new THREE.MeshStandardMaterial({ color: floor, roughness: 0.82 }));
+  fl.rotation.x = -Math.PI/2; fl.position.set(cx, 0.004, cz); fl.receiveShadow = true;
+  g.add(fl);
+  const ce = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
+    new THREE.MeshStandardMaterial({ color: ceil, roughness: 0.96 }));
+  ce.rotation.x = Math.PI/2; ce.position.set(cx, h, cz);
+  g.add(ce);
+  ['+z', '-z', '+x', '-x'].forEach(dir => {
+    if (omit.indexOf(dir) >= 0) return;
+    g.add(buildWallSide(dir, cx, cz, w, d, h, mat, doors));
+  });
+  if (roof) {
+    const rf = new THREE.Mesh(new THREE.BoxGeometry(w + 0.9, 0.36, d + 0.9),
+      new THREE.MeshStandardMaterial({ color: ROOF_COLOR, roughness: 0.9 }));
+    /* ⚠️ 位置必须 h+0.26，别改回 h+0.18。屋顶盒高 0.36，取 h+0.18 时其底面正好压在
+       天花板平面 y=h 上 —— 两面共面 → z-fighting，表现为「移动时天花板（灯那一圈）
+       忽明忽暗地闪」。抬 8cm 同时躲开两处共面：
+         · 天花板平面 y=h                                  → 底面上移到 h+0.08
+         · 八角屋顶 roof8（y 4.64~5.00，平面上与各厅屋面有重叠）→ 顶面 5.04 错开 4cm */
+    rf.position.set(cx, h + 0.26, cz);
+    g.add(rf);
+  }
+  if (lamp) {
+    const l = new THREE.PointLight('#ffe9c6', 18, Math.max(w, d) * 1.7, 2);
+    l.position.set(cx, h - 0.8, cz);
+    g.add(l);
+  }
+  scene.add(g);
+  return g;
+}
+/* 门套：包住墙洞，同时遮住八边形墙板被切开的断面 */
+function buildPortal(x, z, half, top, h, depth) {
+  const g = new THREE.Group();
+  const jw = 0.5;
+  [-1, 1].forEach(s => {
+    const j = new THREE.Mesh(new THREE.BoxGeometry(jw, top, depth), WOOD_MAT);
+    j.position.set(x + s * (half + jw/2), top/2, z);
+    j.castShadow = j.receiveShadow = true;
+    g.add(j);
+  });
+  const l = new THREE.Mesh(new THREE.BoxGeometry(half*2 + jw*2, h - top + 0.02, depth), WOOD_MAT);
+  l.position.set(x, (h + top)/2, z);
+  g.add(l);
+  scene.add(g);
+  return g;
+}
+/* 低斜展牌：短立柱 + 明显后仰的板面（阅览台式，板顶约 0.98m）。
+   ⚠️ **板顶必须低于视高**（眼睛 y≈1.70）—— 这是「展牌不挡身后画作」的硬条件：
+      板顶高于视高时，它在屏幕上一定盖住画心，**把它挪近画、挪远、挪到一边都没用**。
+      2026-10-13 由「板顶 1.96m 的立式大牌」改成本型，配合画心上移，见内厅那一段的算式。 */
+const BOARD_TILT = 0.42;    // 板面后仰角（弧度）≈24°，正对 1.7m 视高在 2m 外的俯视角
+const BOARD_POST_H = 0.45;  // 立柱高
+const BOARD_Y0 = 0.43;      // 板面**下沿**高度（与柱顶齐）
+function buildStandBoard(tex, bw, bh, x, z, rotY) {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, BOARD_POST_H, 0.1),
+    new THREE.MeshStandardMaterial({ color:'#4b4237', roughness:0.7 }));
+  post.position.set(0, BOARD_POST_H/2, 0); post.castShadow = true;
+  g.add(post);
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh),
+    new THREE.MeshBasicMaterial({ map: tex }));
+  b.position.set(0, BOARD_Y0 + bh/2 * Math.cos(BOARD_TILT), 0.04);
+  b.rotation.x = -BOARD_TILT;
+  g.add(b);
+  g.position.set(x, 0, z);
+  if (rotY) g.rotation.y = rotY;
+  scene.add(g);
+  return g;
+}
+/* 板顶 = BOARD_Y0 + bh·cos(BOARD_TILT)。内厅用 bh=0.60 → 0.43+0.548 = **0.98m**。
+   改上面三个常量或调用处的 bh，都要回头核对这个数仍 < 1.26（1.7m 视高、大厅最远视角的临界值）。 */
+
+/* ============================================================================
+   第一单元 · 矿物颜料展厅（2026-10-12 第 21 轮）
+   地平矮展柜 + 原石‑碎料‑色卡 三层陈列 + 专用托具 + 规范矿物铭牌。
+   照明是 3000‑4000K 中性白、斜侧掠射；**不用彩光、不加发光特效**。
+   ============================================================================ */
+
+/* ---------- 1. 定种子伪随机 ----------
+   程序化矿石必须每次刷新长得一模一样 —— 一律不能用 Math.random()。 */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- 2. 矿斑贴图 ----------
+   ⚠️ map(sRGB) 与 roughnessMap(NoColorSpace) 必须**各画一张** canvas。
+   r152+ 起 three 按 texture.source 共享 WebGLTexture，把同一张图同时挂在 map 与
+   roughnessMap 上，两种 colorSpace 会互相覆盖（第 19 轮 motifMat 踩过，见 HANDOFF §8）。 */
+const SPECK_CACHE = {};
+function speckMaps(hex, seed) {
+  if (SPECK_CACHE[hex]) return SPECK_CACHE[hex];
+  const rnd = mulberry32(seed);
+  const blobs = [], dots = [];
+  for (let i = 0; i < 26; i++)
+    blobs.push({ x: rnd(), y: rnd(), r: 0.05 + rnd() * 0.22, up: rnd() > 0.5, a: 0.05 + rnd() * 0.16 });
+  for (let i = 0; i < 460; i++)
+    dots.push({ x: rnd(), y: rnd(), s: 0.7 + rnd() * 1.8, up: rnd() > 0.5 });
+  const paint = colored => canvasTex(256, 256, (ctx, W, H) => {
+    ctx.fillStyle = colored ? hex : '#cfcfcf';
+    ctx.fillRect(0, 0, W, H);
+    for (const b of blobs) {
+      ctx.fillStyle = (b.up ? 'rgba(255,255,255,' : 'rgba(0,0,0,') + (colored ? b.a : b.a * 1.8) + ')';
+      ctx.beginPath(); ctx.arc(b.x * W, b.y * H, b.r * W, 0, Math.PI * 2); ctx.fill();
+    }
+    for (const d of dots) {
+      ctx.fillStyle = d.up ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.20)';
+      ctx.fillRect(d.x * W, d.y * H, d.s, d.s);
+    }
+  });
+  const map = paint(true);
+  const rough = paint(false); rough.colorSpace = THREE.NoColorSpace;
+  SPECK_CACHE[hex] = { map, rough };
+  return SPECK_CACHE[hex];
+}
+
+/* 标本材质：map 已经带上本色，所以 color 一律给白 —— 若同时给 hex，
+   两者会相乘把颜色压暗一档。釉瓷片走 clearcoat 釉面，矿石/料走 flatShading 晶面。 */
+const SPEC_MAT_CACHE = {};
+function specimenMat(hex, seed, glazed) {
+  const k = hex + (glazed ? '|g' : '');
+  if (SPEC_MAT_CACHE[k]) return SPEC_MAT_CACHE[k];
+  const { map, rough } = speckMaps(hex, seed);
+  SPEC_MAT_CACHE[k] = glazed
+    ? new THREE.MeshPhysicalMaterial({ map, roughnessMap: rough, color: '#ffffff',
+        roughness: 0.16, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05,
+        side: THREE.DoubleSide, envMap: ENV_TEX, envMapIntensity: 0.45 })
+    : new THREE.MeshStandardMaterial({ map, roughnessMap: rough, color: '#ffffff',
+        roughness: 0.80, metalness: 0.05, flatShading: true });
+  return SPEC_MAT_CACHE[k];
+}
+/* 干=干料本色。植物干料**不**用颜料色 —— 真实的苏木是暗红木、槐米是橄榄褐、
+   磨出来才有色。这条颜色反差正是「水色」那一层要讲的事：
+   ①② 层是干料本色，③ 层才是研出的色粉与染绢。 */
+const DRIED_HEX = { bud:'#8a7a4a', fruit:'#a86a34', chip:'#7a3a30', bundle:'#5f7358' };
+const driedMat = (form, seed) => specimenMat(DRIED_HEX[form] || '#8a7a4a', seed, false);
+
+/* ---------- 3. 形制 ----------
+   矿石：先归一化到单位球，再按**坐标 + 种子**位移 —— 同一位置的重复顶点算出同一个位移，
+   所以面不会被撕开；位移只由 seed 决定，刷新页面形状不变。 */
+function roughRock(r, seed, jag, detail) {
+  const g = new THREE.IcosahedronGeometry(1, detail === undefined ? 1 : detail);
+  const p = g.attributes.position, v = new THREE.Vector3(), s = seed * 0.618;
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const n = 0.62 * Math.sin(v.x * 2.3 + s) * Math.cos(v.y * 1.9 - s * 0.8)
+                    * Math.sin(v.z * 2.7 + s * 1.4)
+            + 0.38 * (Math.sin(v.x * 5.1 - s) + Math.cos(v.y * 4.7 + s)
+                    + Math.sin(v.z * 5.3 - s * 2.1)) / 3;
+    v.multiplyScalar(r * (1 + jag * n));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+/* 把几何体「坐」到 y=0：位移过的矿石包围盒不再是 ±r，直接用实测最低点落位，
+   否则要么陷进台阶、要么浮在半空（两者在这个尺度下都一眼能看出来）。 */
+function seatOnY0(mesh, baseY) {
+  mesh.geometry.computeBoundingBox();
+  mesh.position.y = baseY - mesh.geometry.boundingBox.min.y;
+}
+/* 植物料 / 树脂料：一小撮细条，按种子散开 */
+function dyePile(r, seed, mat) {
+  const g = new THREE.Group(), rnd = mulberry32(seed * 7 + 3);
+  for (let i = 0; i < 12; i++) {
+    const a = rnd() * Math.PI * 2, rr = r * (0.08 + rnd() * 0.74);
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * 0.05, r * 0.072, r * (0.42 + rnd() * 0.52), 6), mat);
+    m.position.set(Math.cos(a) * rr, r * 0.12 + rnd() * r * 0.18, Math.sin(a) * rr);
+    m.rotation.set(Math.PI / 2 - (rnd() - 0.5) * 0.6, rnd() * Math.PI, (rnd() - 0.5) * 0.8);
+    m.castShadow = true;
+    g.add(m);
+  }
+  return liftToY0(g);        /* 料条随机翻滚，最低点可能扎进台阶里 —— 按实测包围盒抬起 */
+}
+/* 色粉堆：半球压扁 */
+function pigmentMound(r, mat) {
+  const g = new THREE.SphereGeometry(r, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2);
+  g.scale(1, 0.55, 1); g.computeVertexNormals();
+  return new THREE.Mesh(g, mat);
+}
+/* 随机翻滚/堆叠的一组小件，最低点常常穿出台面 —— 按实测包围盒整组抬到 y=0。
+   dyePile 那三行抽成公共函数，植物干料 4 个构造器都要用。 */
+function liftToY0(g) {
+  g.updateMatrixWorld(true);
+  g.position.y -= new THREE.Box3().setFromObject(g).min.y;
+  return g;
+}
+/* ---------- 3.5 植物干料（水色专用，与「矿石原石」并列的另一半）----------
+   文档要求植物展品陈列「栀子、槐米、苏木干料」—— 干料就是能一眼认出来的原植物，
+   不是矿石。全部基本体、全部定种子。 */
+/* 槐米：一根细枝上密生小球（未开的槐花蕾） */
+function budCluster(r, seed, mat) {
+  const g = new THREE.Group(), rnd = mulberry32(seed * 5 + 17);
+  const twig = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.055, r * 0.085, r * 1.5, 6),
+    new THREE.MeshStandardMaterial({ color: '#6d5a3c', roughness: 0.9 }));
+  twig.position.y = r * 0.75; twig.rotation.z = 0.16; twig.castShadow = true;
+  g.add(twig);
+  for (let i = 0; i < 38; i++) {
+    const t = rnd(), a = rnd() * Math.PI * 2;
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r * (0.13 + rnd() * 0.05), 8, 6), mat);
+    b.position.set(twig.rotation.z * -r * 1.5 * t + Math.cos(a) * r * (0.20 + rnd() * 0.26),
+                   r * (0.18 + t * 1.34),
+                   Math.sin(a) * r * (0.20 + rnd() * 0.26));
+    b.castShadow = true;
+    g.add(b);
+  }
+  return liftToY0(g);
+}
+/* 栀子：6~8 枚带棱的椭球果，散堆 */
+function fruitPods(r, seed, mat) {
+  const g = new THREE.Group(), rnd = mulberry32(seed * 9 + 5);
+  const n = 6 + Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.5, rr = r * (0.10 + rnd() * 0.46);
+    const f = new THREE.Mesh(new THREE.SphereGeometry(r * (0.24 + rnd() * 0.09), 12, 9), mat);
+    f.scale.set(1, 0.74 + rnd() * 0.14, 1);
+    f.position.set(Math.cos(a) * rr, r * (0.22 + rnd() * 0.16), Math.sin(a) * rr);
+    f.rotation.set((rnd() - 0.5) * 1.2, rnd() * Math.PI, (rnd() - 0.5) * 1.2);
+    f.castShadow = true;
+    g.add(f);
+  }
+  return liftToY0(g);
+}
+/* 苏木：20 片薄木屑乱堆 + 边上一点胭脂碎料（文档：苏木 + 胭脂） */
+function woodChips(r, seed, mat) {
+  const g = new THREE.Group(), rnd = mulberry32(seed * 11 + 29);
+  for (let i = 0; i < 20; i++) {
+    const a = rnd() * Math.PI * 2, rr = r * (0.06 + rnd() * 0.72);
+    const c = new THREE.Mesh(
+      new THREE.BoxGeometry(r * (0.30 + rnd() * 0.34), r * 0.045, r * (0.14 + rnd() * 0.16)), mat);
+    c.position.set(Math.cos(a) * rr, r * (0.06 + rnd() * 0.34), Math.sin(a) * rr);
+    c.rotation.set((rnd() - 0.5) * 1.5, rnd() * Math.PI, (rnd() - 0.5) * 1.5);
+    c.castShadow = true;
+    g.add(c);
+  }
+  /* 胭脂：虫料，颜色比苏木更艳 —— 单独一小撮，摆在旁边 */
+  const coch = dyePile(r * 0.34, seed + 3,
+    new THREE.MeshStandardMaterial({ color: '#c0344f', roughness: 0.72, flatShading: true }));
+  coch.position.set(r * 0.72, 0, r * 0.52);
+  g.add(coch);
+  return liftToY0(g);
+}
+/* 蓼蓝：一束带叶的茎（月白是蓼蓝调浅得来的复合色，属于植物系） */
+function bundle(r, seed, mat) {
+  const g = new THREE.Group(), rnd = mulberry32(seed * 13 + 7);
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * Math.PI * 2, rr = r * 0.11;
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.030, r * 0.042, r * 1.15, 6), mat);
+    st.position.set(Math.cos(a) * rr, r * 0.58, Math.sin(a) * rr);
+    st.rotation.set((rnd() - 0.5) * 0.34, 0, (rnd() - 0.5) * 0.34);
+    st.castShadow = true;
+    g.add(st);
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = rnd() * Math.PI * 2, rr = r * (0.14 + rnd() * 0.30);
+    const lf = new THREE.Mesh(new THREE.SphereGeometry(r * (0.15 + rnd() * 0.08), 7, 5), mat);
+    lf.scale.set(1, 0.30, 1.9);
+    lf.position.set(Math.cos(a) * rr, r * (0.10 + rnd() * 0.72), Math.sin(a) * rr);
+    lf.rotation.set(0, rnd() * Math.PI, (rnd() - 0.5) * 0.5);
+    lf.castShadow = true;
+    g.add(lf);
+  }
+  return liftToY0(g);
+}
+/* 染色绢小样：水色的真实呈色更接近染绢而不是色粉 —— 石色/水色一眼可辨的差别 */
+function silkSwatch(c) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.052, 0.052),
+    new THREE.MeshStandardMaterial({ color: c.hex, roughness: 0.88, side: THREE.DoubleSide }));
+  m.rotation.x = -1.32;                                  // 几乎平铺，微微翘起一角
+  m.position.y = 0.004;
+  m.castShadow = true;
+  const lip = new THREE.Mesh(new THREE.PlaneGeometry(0.052, 0.016),
+    new THREE.MeshStandardMaterial({ color: c.hex, roughness: 0.88, side: THREE.DoubleSide }));
+  lip.rotation.x = -0.62;
+  lip.position.set(0, 0.010, 0.030);
+  g.add(m, lip);
+  return g;
+}
+/* 把 hex 往白里调 k 倍 —— 沉淀分级的三阶色用它（同一色相，越漂越浅） */
+function tint(hex, k) {
+  const c = new THREE.Color(hex);
+  c.lerp(new THREE.Color('#ffffff'), k);
+  return '#' + c.getHexString();
+}
+
+/* ---------- 4. 专用托具（原石 / 碎料 / 色卡 各一种）---------- */
+/* 亚克力三爪托架：三根细杆向轴心倾，环住矿石腰；透明所以「看不见」，是真实博物馆的常规做法 */
+function oreMount(gripR) {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(gripR * 1.30, gripR * 1.30, 0.010, 28), ACRYLIC_MAT);
+  base.position.y = 0.005;
+  g.add(base);
+  const h = gripR * 1.05;
+  for (let i = 0; i < 3; i++) {
+    const hold = new THREE.Group();
+    hold.rotation.y = -(i / 3 * Math.PI * 2 + 0.5);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, h, 8), ACRYLIC_MAT);
+    rod.position.set(gripR * 0.94, 0.012 + h * 0.46, 0);
+    rod.rotation.z = 0.30;                       // 顶端向轴心倾 → 夹住矿石
+    hold.add(rod);
+    g.add(hold);
+  }
+  return g;
+}
+/* 白瓷浅碟：碎料 / 色粉共用 */
+function shallowDish(r, h, mat) {
+  const g = new THREE.Group();
+  const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.86, h, 28), mat);
+  d.position.y = h / 2; d.castShadow = true; d.receiveShadow = true;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(r, h * 0.16, 8, 28), mat);
+  rim.rotation.x = Math.PI / 2; rim.position.y = h;
+  g.add(d, rim);
+  return g;
+}
+/* 色卡（成品颜料）：色块 + 色名 + 色值，斜置在小黄铜卡托上 */
+function colorCard(c, min) {
+  const g = new THREE.Group();
+  const tex = canvasTex(256, 176, (ctx, W, H) => {
+    ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(92,78,50,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(6, 6, W - 12, H - 12);
+    ctx.fillStyle = c.hex; ctx.fillRect(18, 18, 94, 140);
+    ctx.strokeStyle = 'rgba(60,50,32,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(18, 18, 94, 140);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#241f16'; ctx.font = `bold 48px ${CJK}`;
+    ctx.fillText(c.name, 126, 76);
+    ctx.fillStyle = '#6d6148';
+    ctx.font = '22px ui-monospace,Consolas,monospace';
+    ctx.fillText(c.hex.toUpperCase(), 128, 108);
+    ctx.font = `22px ${CJK}`;
+    ctx.fillText('颜料 · ' + min.pigment, 128, 142);
+  });
+  const board = new THREE.Group();
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.082, 0.005), BRASS_MAT);
+  back.position.z = -0.004;
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.105, 0.072),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 }));
+  card.castShadow = back.castShadow = true;
+  board.add(back, card);
+  board.rotation.x = -0.38;                       // 后仰 22°，正对俯视视线
+  board.position.y = 0.045;
+  g.add(board);
+  [-1, 1].forEach(s => {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.044, 0.030), BRASS_MAT);
+    foot.position.set(s * 0.048, 0.022, -0.006);
+    g.add(foot);
+  });
+  return g;
+}
+
+/* ---------- 5. 规范标本铭牌 ----------
+   格式照博物馆标签：中文名 + 英名 / 原料名 / 成分 / 产地 / 颜料名 + 编号。
+   ⚠️ 倾角是算出来的：早先取 0.52rad（离竖直 30°）立在前檐，顶边到 y≈0.895、z≈0.305，
+   而它正后方的色卡层顶边只到 y≈0.829、z≈0.193 —— 铭牌比被它挡住的东西还高 6.6cm、
+   又在前 11cm，必然切进俯视视线（用户实测反馈）。
+   现在放平到 1.20rad（离竖直 69°），竖直投影只剩 0.16·cos(1.2)=0.058m，顶边 y≈0.808，
+   **低于**色卡顶边 —— 视线先越过铭牌再落到标本上。真实平柜的标签也正是这样几乎平铺的。 */
+const LABEL_W = 0.26, LABEL_H = 0.16, LABEL_TILT = 1.20;
+function mineralLabel(min, c, no) {
+  const g = new THREE.Group();
+  const tex = canvasTex(520, 320, (ctx, W, H) => {
+    ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(92,78,50,0.55)'; ctx.lineWidth = 3; ctx.strokeRect(8, 8, W - 16, H - 16);
+    ctx.strokeStyle = 'rgba(92,78,50,0.22)'; ctx.lineWidth = 1; ctx.strokeRect(15, 15, W - 30, H - 30);
+    ctx.fillStyle = c.hex; ctx.fillRect(26, 26, 54, 54);
+    ctx.strokeStyle = 'rgba(60,50,32,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(26, 26, 54, 54);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#241f16';
+    ctx.font = `bold 50px ${CJK}`; ctx.fillText(c.name, 96, 70);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#8a7c5e';
+    ctx.font = '24px ui-monospace,Consolas,monospace'; ctx.fillText(min.en, W - 26, 62);
+    ctx.strokeStyle = 'rgba(92,78,50,0.35)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(26, 96); ctx.lineTo(W - 26, 96); ctx.stroke();
+    /* 石色问「什么矿物」，水色问「什么草木」——两类的字段名不一样 */
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#3a3226'; ctx.font = `30px ${CJK}`;
+    ctx.fillText((IS_STONE(min) ? '矿物　' : '原料　') + min.mat, 26, 140);
+    ctx.fillStyle = '#6d6148'; ctx.font = '24px ui-monospace,Consolas,monospace';
+    ctx.fillText(min.comp, 26, 182);
+    ctx.fillStyle = '#3a3226'; ctx.font = `26px ${CJK}`;
+    ctx.fillText('产地　' + min.origin, 26, 232);
+    ctx.fillText('颜料　' + min.pigment, 26, 274);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#6d6148';
+    ctx.font = '24px ui-monospace,Consolas,monospace';
+    ctx.fillText('NO.' + no, W - 26, 274);
+  });
+  const board = new THREE.Group();
+  const back = new THREE.Mesh(
+    new THREE.BoxGeometry(LABEL_W + 0.014, LABEL_H + 0.014, 0.006), BRASS_MAT);
+  back.position.z = -0.004;
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(LABEL_W, LABEL_H),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.76 }));
+  card.castShadow = back.castShadow = true;
+  board.add(back, card);
+  board.rotation.x = -LABEL_TILT;                       // 顶边后倒
+  board.position.y = LABEL_H * Math.cos(LABEL_TILT) / 2 + 0.006;
+  g.add(board);
+  return g;
+}
+
+/* ---------- 6. 地平矮展柜 ----------
+   本地坐标：X = 柜宽（1.50）、Z = 进深（0.92）、+Z 朝观众。
+   三层台阶自前向后抬高：色卡（台面）→ 碎料 → 原石，后排不遮挡前排。 */
+const CASE_W = 1.50, CASE_D = 0.92;
+const DECK_Y = 0.75, BONNET_H = 0.42;                  // 罩顶 1.17m：站着俯视 40°~50°
+const TIER_Y = [0.75, 0.83, 0.91];                     // 色卡 / 碎料 / 原石
+const TIER_Z = [0.13, -0.09, -0.32];
+const TIER_D = [0.22, 0.22, 0.24];
+const BAY_X  = [-0.36, 0.36];                          // 两个标本位的中心
+const SILL_Z = 0.33;                                   // 铭牌前檐（平铺，footprint 0.256…0.404，在玻璃 0.44 内）
+
+function caseNameplate(title, sub) {
+  const g = new THREE.Group();
+  const tex = canvasTex(1024, 168, (ctx, W, H) => {
+    ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(92,78,50,0.5)'; ctx.lineWidth = 3; ctx.strokeRect(8, 8, W - 16, H - 16);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#241f16';
+    ctx.font = `bold 74px ${CJK}`; ctx.fillText(title, 38, 108);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#7d6f52';
+    ctx.font = `34px ${CJK}`; ctx.fillText(sub, W - 38, 104);
+  });
+  const board = new THREE.Group();
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.233, 0.012), BRASS_MAT);
+  back.position.z = -0.007;
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(1.30, 0.213),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.76 }));
+  card.castShadow = back.castShadow = true;
+  board.add(back, card);
+  board.rotation.x = -0.26;                            // 上仰 15°
+  board.position.set(0, 0.60, CASE_D / 2 + 0.03);
+  g.add(board);
+  return g;
+}
+
+/* 一个标本位：① 原石/干料 → ② 矿粒/粗碎料 → ③ 色粉(+染绢) 三层 + 托具 + 罩内铭牌
+   石色与植物水色的区别就在这三层的内容上（用户文档的两条硬要求）。 */
+function specimenBay(min, bx, no) {
+  const g = new THREE.Group(), c = COLOR_BY_ID[min.cid], seed = 1000 + no * 37;
+  const stone = IS_STONE(min);
+  const mat = specimenMat(c.hex, seed, false);
+  const matRaw = stone ? mat : driedMat(min.form, seed);   // 石色①②③同色；水色①②用干料本色
+  /* ① 原石 / 干料层：矿石用三爪托架托着；干料是松散的一堆，直接坐在台面上 */
+  const rockG = new THREE.Group();
+  let top;
+  if (stone) {
+    rockG.add(oreMount(0.085));
+    top = new THREE.Mesh(roughRock(0.082, seed, 0.30, 1), matRaw);
+    seatOnY0(top, 0.010);                              // 实测最低点落在托座面上
+  } else {
+    /* 干料构造器返回的都是已把最低点归零到 y=0 的 Group，直接坐在台面上 */
+    top = { bud   : () => budCluster(0.090, seed, matRaw),
+            fruit : () => fruitPods(0.088, seed, matRaw),
+            chip  : () => woodChips(0.090, seed, matRaw),
+            bundle: () => bundle(0.092, seed, matRaw) }[min.form]();
+    top.position.y += 0.008;
+  }
+  top.castShadow = true;
+  rockG.add(top);
+  rockG.position.set(bx, TIER_Y[2], TIER_Z[2]);
+  g.add(rockG);
+  /* ② 矿粒 / 粗碎料层：白瓷浅碟里一小堆同色碎块 */
+  const frag = new THREE.Group();
+  frag.add(shallowDish(0.082, 0.030, PORCELAIN_MAT));
+  const rnd = mulberry32(seed * 3 + 11);
+  for (let i = 0; i < 6; i++) {
+    const a = rnd() * Math.PI * 2, rr = 0.018 + rnd() * 0.032;
+    const f = new THREE.Mesh(roughRock(0.011 + rnd() * 0.010, seed + i * 5, 0.42, 0), matRaw);
+    f.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    seatOnY0(f, 0.028);                                // 碟口高 0.03，碎块坐面上略陷 2mm
+    f.castShadow = true;
+    frag.add(f);
+  }
+  frag.position.set(bx, TIER_Y[1], TIER_Z[1]);
+  g.add(frag);
+  /* ③ 色粉层：浅碟色粉堆 + 斜置色卡（水色另加一方染色绢 —— 水色的真实呈色是染在绢上的） */
+  const card = new THREE.Group();
+  const dish = shallowDish(0.052, 0.018, PORCELAIN_MAT);
+  dish.position.set(0, 0, -0.015);
+  const mound = pigmentMound(0.042, mat);
+  mound.position.set(0, 0.018, -0.015);                // 碟口高 0.018：色粉堆坐在碟面上
+  const cc = colorCard(c, min);
+  cc.position.set(0, 0, 0.078);
+  card.add(dish, mound, cc);
+  if (!stone) {
+    const sw = silkSwatch(c);
+    sw.position.set(-0.115, 0.002, 0.052);
+    card.add(sw);
+  }
+  card.position.set(bx, TIER_Y[0], 0.115);
+  g.add(card);
+  /* ④ 罩内规范铭牌 */
+  const lab = mineralLabel(min, c, String(no).padStart(2, '0'));
+  lab.position.set(bx, DECK_Y, SILL_Z);
+  g.add(lab);
+  /* ⑤ 斜侧白光：灯装在罩内前外侧，从前上角掠过三层台 —— 靠明暗关系出矿物的晶面与颗粒感 */
+  const sp = new THREE.SpotLight('#ffeedd', 1.8, 3.2, 0.55, 0.7, 2);
+  sp.position.set(bx + (bx < 0 ? -0.26 : 0.26), 1.10, 0.30);
+  sp.target.position.set(bx, 0.84, -0.02);
+  sp.castShadow = false;
+  g.add(sp, sp.target);
+  return g;
+}
+
+function buildTableCase(title, sub, minA, minB) {
+  const g = new THREE.Group();
+  /* 踢脚（四周内缩）+ 柜体 + 出檐台面 */
+  const kick = new THREE.Mesh(new THREE.BoxGeometry(CASE_W - 0.10, 0.07, CASE_D - 0.10), WOOD_MAT);
+  kick.position.y = 0.035; kick.castShadow = kick.receiveShadow = true; g.add(kick);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(CASE_W, 0.65, CASE_D), CASE_BODY_MAT);
+  body.position.y = 0.395; body.castShadow = body.receiveShadow = true; g.add(body);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(CASE_W + 0.02, 0.03, CASE_D + 0.02), CASE_FELT_MAT);
+  deck.position.y = DECK_Y - 0.015; deck.castShadow = deck.receiveShadow = true; g.add(deck);
+  /* 罩内两层台阶（色卡层就是台面本身） */
+  for (let t = 1; t < 3; t++) {
+    const h = TIER_Y[t] - DECK_Y;
+    const step = new THREE.Mesh(new THREE.BoxGeometry(CASE_W - 0.06, h, TIER_D[t]), CASE_STEP_MAT);
+    step.position.set(0, DECK_Y + h / 2, TIER_Z[t]);
+    step.castShadow = step.receiveShadow = true;
+    g.add(step);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(CASE_W - 0.06, 0.008, TIER_D[t]), CASE_FELT_MAT);
+    cap.position.set(0, TIER_Y[t] - 0.004, TIER_Z[t]);
+    g.add(cap);
+  }
+  /* 两个标本位 */
+  g.add(specimenBay(minA, BAY_X[0], 1), specimenBay(minB, BAY_X[1], 2));
+  /* 玻璃罩：四面墙 + 平顶，比台面缩进 1cm */
+  const halfW = CASE_W / 2, halfD = CASE_D / 2 - 0.01;
+  [[CASE_W, 0, halfD, 0], [CASE_W, 0, -halfD, 0],
+   [CASE_D - 0.02, halfW, 0, Math.PI / 2], [CASE_D - 0.02, -halfW, 0, Math.PI / 2]]
+    .forEach(([gw, px, pz, ry]) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(gw, BONNET_H), CASE_GLASS);
+      m.position.set(px, DECK_Y + BONNET_H / 2, pz);
+      m.rotation.y = ry;
+      g.add(m);
+    });
+  const lid = new THREE.Mesh(new THREE.PlaneGeometry(CASE_W, CASE_D - 0.02), CASE_GLASS);
+  lid.rotation.x = -Math.PI / 2; lid.position.y = DECK_Y + BONNET_H;
+  g.add(lid);
+  /* 罩体边框：底衬条 + 四角立柱 */
+  const bar = (w, d, px, pz) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.024, d), CASE_FRAME_MAT);
+    m.position.set(px, DECK_Y + 0.012, pz); m.castShadow = true; g.add(m);
+  };
+  bar(CASE_W, 0.024, 0, halfD); bar(CASE_W, 0.024, 0, -halfD);
+  bar(0.024, CASE_D - 0.02, halfW, 0); bar(0.024, CASE_D - 0.02, -halfW, 0);
+  [[halfW, halfD], [halfW, -halfD], [-halfW, halfD], [-halfW, -halfD]].forEach(([px, pz]) => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.024, BONNET_H, 0.024), CASE_FRAME_MAT);
+    p.position.set(px, DECK_Y + BONNET_H / 2, pz); p.castShadow = true; g.add(p);
+  });
+  g.add(caseNameplate(title, sub));
+  return g;
+}
+
+/* ---------- 6.5 工序台（北墙）：把「加工流程」做成看得见摸得着的实物 ----------
+   四座木台，台面 0.78m（与平柜同高，站着看不用弯腰），沿北墙一字排开：
+     ① 粉碎 → 石臼与杵   ② 水飞 → 陶盆漂洗
+     ③ 沉淀 → 三只玻璃小缸（同一色相的头青/二青/三青）  ④ 晾干 → 竹匾 + 8 色色粉
+   台前缘各平放一块小铭牌。全部无彩光、无发光。 */
+const BENCH_H = 0.78, BENCH_W = 0.58;
+function benchLabel(no, title, sub) {
+  const g = new THREE.Group();
+  const tex = canvasTex(520, 200, (ctx, W, H) => {
+    ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(92,78,50,0.55)'; ctx.lineWidth = 3; ctx.strokeRect(8, 8, W - 16, H - 16);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#7d6f52'; ctx.textAlign = 'left';
+    ctx.font = '26px ui-monospace,Consolas,monospace'; ctx.fillText('STEP ' + no, 26, 46);
+    ctx.fillStyle = '#241f16'; ctx.font = `bold 46px ${CJK}`; ctx.fillText(title, 26, 108);
+    ctx.fillStyle = '#5a5040'; ctx.font = `24px ${CJK}`; ctx.fillText(sub, 26, 158);
+  });
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.116, 0.006), BRASS_MAT);
+  back.position.z = -0.004;
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.29, 0.108),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.76 }));
+  card.castShadow = back.castShadow = true;
+  const board = new THREE.Group();
+  board.add(back, card);
+  board.rotation.x = -1.16;                              // 与罩内铭牌同法：平铺，不挡东西
+  board.position.set(0, 0.030, 0.235);
+  g.add(board);
+  return g;
+}
+/* ① 石臼 + 杵：捣碎矿石。臼口里放几块原矿，杵斜倚在沿上 */
+function mortar() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.098, 0.15, 22), CASE_STEP_MAT);
+  body.position.y = 0.075; body.castShadow = body.receiveShadow = true;
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.062, 0.115, 22),
+    new THREE.MeshStandardMaterial({ color: '#6f6a5e', roughness: 0.95 }));
+  bowl.position.y = 0.100;
+  const pestle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.030, 0.30, 12), CASE_STEP_MAT);
+  pestle.position.set(0.115, 0.145, 0.030); pestle.rotation.z = 0.42; pestle.castShadow = true;
+  g.add(body, bowl, pestle);
+  const rnd = mulberry32(41);
+  for (let i = 0; i < 5; i++) {                          // 臼里没捣完的矿石
+    const r = 0.016 + rnd() * 0.012;
+    const o = new THREE.Mesh(roughRock(r, 700 + i * 13, 0.40, 0),
+      specimenMat(COLOR_BY_ID[STONE_CIDS[i % 4]].hex, 700 + i * 13, false));
+    const a = rnd() * Math.PI * 2, rr = rnd() * 0.045;
+    o.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    seatOnY0(o, 0.152);
+    o.castShadow = true;
+    g.add(o);
+  }
+  return g;
+}
+/* ② 陶盆 + 水 + 研石：水飞漂洗（同色系粗陶，不用彩釉） */
+function washBasin() {
+  const g = new THREE.Group();
+  const CLAY = new THREE.MeshStandardMaterial({ color: '#8a7963', roughness: 0.9 });
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.132, 0.075, 26, 1, false), CLAY);
+  basin.position.y = 0.038; basin.castShadow = basin.receiveShadow = true;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.165, 0.012, 8, 26), CLAY);
+  rim.rotation.x = Math.PI / 2; rim.position.y = 0.075;
+  /* 「水」用一块深色哑光面片示意 —— 不用透明/发光，避免看起来像特效 */
+  const water = new THREE.Mesh(new THREE.CircleGeometry(0.150, 26),
+    new THREE.MeshStandardMaterial({ color: '#4a5760', roughness: 0.24 }));
+  water.rotation.x = -Math.PI / 2; water.position.y = 0.068;
+  const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.030, 16), CASE_STEP_MAT);
+  stone.position.set(0.030, 0.083, -0.020); stone.rotation.z = 0.08;
+  stone.castShadow = true;
+  g.add(basin, rim, water, stone);
+  return g;
+}
+/* ③ 三只玻璃小缸：同一色相的头青 / 二青 / 三青 —— 把「沉淀分级」讲明白 */
+function settleJars(hex) {
+  const g = new THREE.Group();
+  const LEVELS = [['头青', 0.00], ['二青', 0.30], ['三青', 0.58]];
+  LEVELS.forEach(([name, k], i) => {
+    const x = (i - 1) * 0.115;
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.050, 0.150, 20, 1, true), CASE_GLASS);
+    jar.position.set(x, 0.075, 0);
+    const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.050, 20), CASE_GLASS);
+    bottom.rotation.x = Math.PI / 2; bottom.position.set(x, 0.001, 0);
+    /* 缸里沉积的颜料：越往下层越浅（漂得越久越淡） */
+    const sed = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.042, 20),
+      new THREE.MeshStandardMaterial({ color: tint(hex, k), roughness: 0.88 }));
+    sed.position.set(x, 0.021, 0);
+    const wa = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.047, 0.088, 20),
+      new THREE.MeshStandardMaterial({ color: '#46525a', roughness: 0.3, transparent: true, opacity: 0.5 }));
+    wa.position.set(x, 0.086, 0);
+    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.048, 0.014),
+      new THREE.MeshStandardMaterial({ map: canvasTex(240, 70, (ctx, W, H) => {
+        ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = `40px ${CJK}`; ctx.fillText(name, W / 2, H / 2 + 2);
+      }), roughness: 0.85 }));
+    nm.rotation.x = -1.25; nm.position.set(x, 0.005, 0.062);
+    g.add(jar, bottom, sed, wa, nm);
+  });
+  return g;
+}
+/* ④ 竹匾 + 8 色色粉小堆：全厅八色的收束点 */
+function bambooTray() {
+  const g = new THREE.Group();
+  const BAMBOO = new THREE.MeshStandardMaterial({ color: '#b99a63', roughness: 0.86 });
+  const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.168, 0.022, 28, 1, false), BAMBOO);
+  tray.position.y = 0.011; tray.castShadow = tray.receiveShadow = true;
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.175, 0.013, 8, 28), BAMBOO);
+  lip.rotation.x = Math.PI / 2; lip.position.y = 0.022;
+  g.add(tray, lip);
+  MINERALS.forEach((m, i) => {                            // 8 色，绕匾一圈
+    const a = (i / MINERALS.length) * Math.PI * 2 + 0.35;
+    const r = 0.105;
+    const c = COLOR_BY_ID[m.cid];
+    const p = pigmentMound(0.032, specimenMat(c.hex, 900 + i * 17, false));
+    p.position.set(Math.cos(a) * r, 0.022, Math.sin(a) * r);
+    p.castShadow = true;
+    g.add(p);
+  });
+  return g;
+}
+/* 一座工序台：木台 + 台面 + 道具 + 平铺小铭牌（props 由调用方给，便于四台共用） */
+function processBench(no, title, sub, props) {
+  const g = new THREE.Group();
+  const kick = new THREE.Mesh(new THREE.BoxGeometry(BENCH_W - 0.06, 0.06, BENCH_W - 0.06), WOOD_MAT);
+  kick.position.y = 0.03; kick.castShadow = kick.receiveShadow = true; g.add(kick);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(BENCH_W, BENCH_H - 0.09, BENCH_W), CASE_BODY_MAT);
+  body.position.y = (BENCH_H - 0.09) / 2 + 0.06; body.castShadow = body.receiveShadow = true; g.add(body);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(BENCH_W + 0.03, 0.03, BENCH_W + 0.03), CASE_FELT_MAT);
+  deck.position.y = BENCH_H - 0.015; deck.castShadow = deck.receiveShadow = true; g.add(deck);
+  props.position.set(0, BENCH_H, 0);
+  const lab = benchLabel(no, title, sub);
+  lab.position.y = BENCH_H;                              // 铭牌平铺在台面前缘
+  g.add(props, lab);
+  /* ⚠️ 这里**不加灯**：本厅已有 10 盏平柜射灯 + 2 盏洗墙灯 + buildRoom 的室内主灯，
+     three.js 前向渲染没有光照剔除，再加 4 盏是全场景成本（见 HANDOFF §7.8 灯光预算）。 */
+  return g;
+}
+
+/* ---------- 7. 工艺展板：从石头到颜色，六道工序 ---------- */
+function processTex() {
+  const STEPS = [
+    ['采矿', '山中采出矿石原块'],
+    ['选料', '剔除杂质，按色分堆'],
+    ['粉碎', '捣成粗砂，石臼碾细'],
+    ['水飞', '水中研磨漂洗去土'],
+    ['分级', '沉淀分层，头青二青三青'],
+    ['成粉', '晾干收贮，调胶上绢']
+  ];
+  return canvasTex(1400, 800, (ctx, W, H) => {
+    ctx.fillStyle = '#efe6d2'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 4; ctx.strokeRect(16, 16, W - 32, H - 32);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#2f2a1e'; ctx.font = `bold 62px ${CJK}`;
+    ctx.fillText('从石头到颜色', W / 2, 108);
+    ctx.fillStyle = '#7d6f52'; ctx.font = '26px ui-monospace,Consolas,monospace';
+    ctx.fillText('FROM ORE TO PIGMENT', W / 2, 152);
+    ctx.strokeStyle = 'rgba(90,75,45,0.35)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(80, 190); ctx.lineTo(W - 80, 190); ctx.stroke();
+    const cw = 300, ch = 190, gx = 60, gy = 40;
+    const x0 = (W - (cw * 3 + gx * 2)) / 2, y0 = 262;
+    STEPS.forEach(([t, d], i) => {
+      const r = Math.floor(i / 3), c = i % 3;
+      const x = x0 + c * (cw + gx), y = y0 + r * (ch + gy);
+      ctx.fillStyle = '#f6f0e2'; ctx.fillRect(x, y, cw, ch);
+      ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 3; ctx.strokeRect(x, y, cw, ch);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#a89468'; ctx.font = '22px ui-monospace,Consolas,monospace';
+      ctx.fillText('STEP ' + (i + 1), x + 22, y + 46);
+      ctx.fillStyle = '#2f2a1e'; ctx.font = `bold 52px ${CJK}`;
+      ctx.fillText(t, x + 22, y + 118);
+      ctx.fillStyle = '#6d6148'; ctx.font = `24px ${CJK}`;
+      ctx.fillText(d, x + 22, y + 162);
+      ctx.strokeStyle = 'rgba(90,75,45,0.55)'; ctx.fillStyle = 'rgba(90,75,45,0.55)';
+      ctx.lineWidth = 3;
+      if (c < 2) {                                     // 横向箭头
+        const ax = x + cw + 10, ay = y + ch / 2;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + gx - 26, ay); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ax + gx - 14, ay);
+        ctx.lineTo(ax + gx - 26, ay - 9); ctx.lineTo(ax + gx - 26, ay + 9);
+        ctx.closePath(); ctx.fill();
+      } else if (r === 0) {                            // 折返箭头
+        ctx.beginPath();
+        ctx.moveTo(x + cw / 2, y + ch + 6); ctx.lineTo(x + cw / 2, y + ch + gy - 14); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + cw / 2, y + ch + gy - 2);
+        ctx.lineTo(x + cw / 2 - 9, y + ch + gy - 14); ctx.lineTo(x + cw / 2 + 9, y + ch + gy - 14);
+        ctx.closePath(); ctx.fill();
+      }
+    });
+  });
+}
+
+/* ---------- 8. 原料墙（西墙）：进门正对的焦点 ----------
+   分两段，各 12 件，中间一块铜隔板断开：
+     北半「石色 · 矿石」  —— 紧邻北墙的粉碎/水飞工序，原料与工序相邻
+     南半「水色 · 草木」  —— 紧邻南墙西端的水色成品柜
+   ⚠️ 矿石是位移过的几何体（包围盒不再是 ±r），用 seatOnY0 落位；
+      植物干料构造器自己已归零到 y=0，直接摆。 */
+function buildSpecimenWall() {
+  const g = new THREE.Group();
+  const zc = 21.0, len = 7.0, topY = 1.20;
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.055, len), CASE_STEP_MAT);
+  shelf.position.set(-18.72, topY - 0.0275, zc);
+  shelf.castShadow = shelf.receiveShadow = true;
+  g.add(shelf);
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.040, len), CASE_FRAME_MAT);
+  lip.position.set(-18.583, topY + 0.014, zc);
+  g.add(lip);
+  [18.6, 20.2, 21.8, 23.4].forEach(z => {
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.028, 0.05), CASE_FRAME_MAT);
+    br.position.set(-18.74, topY - 0.068, z); br.castShadow = true;
+    g.add(br);
+  });
+  /* 中间铜隔板：把两段分开 */
+  const div = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.075, 0.016), CASE_FRAME_MAT);
+  div.position.set(-18.72, topY + 0.0375, zc - 0.005);
+  div.castShadow = true;
+  g.add(div);
+
+  /* 一段 12 件：z0 起、共 2.5m，颜色在自己那一类里循环（4 色 × 3 件）。
+     big=false 的植物干料用小一号，免得贴到邻件。 */
+  const runSection = (cids, kind, z0) => {
+    for (let i = 0; i < 12; i++) {
+      const c = COLOR_BY_ID[cids[i % cids.length]];
+      const min = MINERAL_BY_CID[c.id];
+      const stone = kind === 'stone';
+      const seed = 500 + (stone ? 0 : 300) + i * 29;
+      const rp = mulberry32(seed)();
+      const r = stone ? 0.038 + rp * 0.022 : 0.038 + rp * 0.014;
+      const x = -18.78, z = z0 + i * (2.5 / 11);
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.35, r * 1.35, 0.006, 20), ACRYLIC_MAT);
+      pad.position.set(x, topY + 0.003, z);
+      g.add(pad);
+      let it;
+      if (stone) {
+        it = new THREE.Mesh(roughRock(r, seed, 0.34, 1), specimenMat(c.hex, seed, false));
+        it.position.set(x, 0, z);
+        seatOnY0(it, topY + 0.006);                    // 坐在亚克力小垫上（垫高 6mm）
+      } else {
+        it = { bud:    () => budCluster(r, seed, driedMat('bud', seed)),
+               fruit:  () => fruitPods(r, seed, driedMat('fruit', seed)),
+               chip:   () => woodChips(r, seed, driedMat('chip', seed)),
+               bundle: () => bundle(r, seed, driedMat('bundle', seed)) }[min.form]();
+        it.position.set(x, topY + 0.006, z);
+      }
+      it.castShadow = true;
+      g.add(it);
+      /* 窄条小签：本色块 + 原料名，平贴在展品前面 */
+      const tex = canvasTex(340, 54, (ctx, W, H) => {
+        ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = 'rgba(92,78,50,0.45)'; ctx.lineWidth = 2; ctx.strokeRect(3, 3, W - 6, H - 6);
+        ctx.fillStyle = c.hex; ctx.fillRect(12, 11, 32, 32);
+        ctx.strokeStyle = 'rgba(60,50,32,0.45)'; ctx.lineWidth = 1; ctx.strokeRect(12, 11, 32, 32);
+        ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.font = `26px ${CJK}`; ctx.fillText(min.mat, 56, 40);
+      });
+      const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.135, 0.0214),
+        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
+      tag.rotation.set(-Math.PI / 2 + 0.16, 0, Math.PI / 2);   // 平放、长边顺着墙
+      tag.position.set(-18.625, topY + 0.005, z);
+      g.add(tag);
+    }
+  };
+  runSection(STONE_CIDS, 'stone', 18.0);                 // 北半
+  runSection(PLANT_CIDS, 'plant', 21.5);                 // 南半
+
+  /* 两段的标题铜牌（比层板高一截，落在展品头顶之上） */
+  plate(textBoardTex({ w: 900, h: 240, bg:'#2a241b', fg:'#e8cf94',
+    title:'石色 · 矿石研磨', sub:'MINERAL PIGMENT', titleSize:52, align:'center' }),
+    1.46, 0.39, -18.86, 1.62, 19.25, Math.PI / 2);
+  plate(textBoardTex({ w: 900, h: 240, bg:'#2a241b', fg:'#e8cf94',
+    title:'水色 · 草木浸出', sub:'PLANT DYE', titleSize:52, align:'center' }),
+    1.46, 0.39, -18.86, 1.62, 22.75, Math.PI / 2);
+
+  /* 洗墙光：两盏中性白斜照层板（不加彩、不投影） */
+  [18.6, 23.4].forEach(z => {
+    const sp = new THREE.SpotLight('#fff2e2', 9, 6, 0.60, 0.75, 2);
+    sp.position.set(-18.30, 3.15, z);
+    sp.target.position.set(-18.72, topY, z);
+    sp.castShadow = false;
+    g.add(sp, sp.target);
+  });
+  scene.add(g);
+  return g;
+}
+
+/* ---------- 可行走区域（展厅集合） + 圆形障碍 ---------- */
+/* ⚠️ 必须建在各展厅之前：展厅里的家具要往 blockers 里 push，
+   const 在下面声明会触发 TDZ ReferenceError → 整个模块死掉白屏。 */
+const WALK = [
+  { circle: 12.6 },                        // 八角主厅
+  { box: [-1.05, 1.05,  11.0,  15.5] },    // 南门洞
+  { box: [-5.9,  5.9,   15.2,  25.4] },    // 序厅
+  { box: [-1.25, 1.25,  25.2,  27.8] },    // 序厅大门
+  { box: [-5.0,  5.0,   27.4,  36.5] },    // 门前平台 · 甬道
+  { box: [-18.4, -7.1,  17.1,  24.9] },    // 第一单元
+  { box: [-7.6,  -5.7,  19.7,  22.3] },    // 第一单元门
+  { box: [-1.05, 1.05, -15.5, -11.0] },    // 北门洞
+  { box: [-5.9,  5.9,  -24.8, -15.2] },    // 内厅
+  { box: [ 5.7,  7.6,  -21.3, -18.7] },    // 第四单元门（对 z=−20 的门洞）
+  { box: [ 7.1, 17.9,  -24.9, -15.1] }     // 第四单元
+];
+function walkable(x, z) {
+  for (const w of WALK) {
+    if (w.circle) { if (x*x + z*z <= w.circle * w.circle) return true; }
+    else { const b = w.box; if (x >= b[0] && x <= b[1] && z >= b[2] && z <= b[3]) return true; }
+  }
+  return false;
+}
+const blockers = [
+  { x: 0, z: 0, r: 1.9 },                                   // 中央信息台
+  ...exhibits.map(e => ({ x: e.x, z: e.z, r: 1.7 })),       // 8 个展台（含玻璃柜）
+  { x: -4.2, z:  22.72, r: 1.15 },                          // 序厅平面导览牌（落地双面牌；木架外缘对角线 1.01 + 余量）
+  { x: -4.3, z:  31.5, r: 0.45 }, { x: 4.3, z: 31.5, r: 0.45 },  // 甬道灯柱
+  { x: -6.2, z: -20.0, r: 1.35 }                            // 内厅辅助展板（板面加大到 2.4m，半径由 1.1 放大）
+  /* 第一单元的展柜与标本墙另有 blockers：由 第一单元那一段自己 push（见 buildTableCase 调用处）。
+     北墙的两块展板不占地面，WALK 的 z≥17.1 已把它们隔在 0.44m 外，不需要额外障碍。 */
+];
+PLATES.forEach((p, k) => blockers.push({ x: -5.6 + k * 1.6, z: -23.0, r: 0.55 }));
+
+/* 画作附近的提示半径 */
+const PAINT_POS = { x: 0, z: -23.0, r: 4.6 };
+
+/* ================= 序厅（入口 · 开篇）================= */
+buildRoom({ cx:0, cz:20, w:13, d:12, wall:'#9a968f', floor:'#cfc9bd', doors:[
+  { side:'-z', at:0,  half:1.4, top:3.1 },   // → 八角主厅
+  { side:'+z', at:0,  half:1.5, top:3.4 },   // → 室外大门
+  { side:'-x', at:21, half:1.5, top:3.1 }    // → 第一单元
+]});
+buildPortal(0,  14.15, 1.4, 3.1, WALL_H, 1.5);   // 序厅 ↔ 主厅
+buildPortal(0,  26.0,  1.5, 3.4, WALL_H, 0.9);   // 室外大门
+
+/* 门楣匾额 */
+plate(canvasTex(1024, 220, (ctx, W, H) => {
+  ctx.fillStyle = '#1d1a14'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#a8853f'; ctx.lineWidth = 8; ctx.strokeRect(14, 14, W-28, H-28);
+  ctx.fillStyle = '#e8cf94'; ctx.textAlign = 'center';
+  ctx.font = `bold 120px ${CJK}`; ctx.fillText(ASSETS.door.title, W/2, 132);
+  ctx.font = '26px monospace'; ctx.fillStyle = 'rgba(232,207,148,0.55)';
+  ctx.fillText(ASSETS.door.sub, W/2, 186);
+}), 3.0, 0.64, 0, 3.95, 26.52);   /* z 要落在大门门套外面（门套 z∈[25.55,26.45]），否则被埋进木料里 */
+
+/* 前言展板（你的展词） */
+plate(textBoardTex({ w:1024, h:660, title:ASSETS.foreword.head, body:ASSETS.foreword.body,
+        titleSize:62, bodySize:32, align:'center' }), 2.5, 1.61, -6.26, 1.22, 16.6, Math.PI/2);
+const fgBase = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 2.7), WOOD_MAT);
+fgBase.position.set(-6.3, 0.21, 16.6); fgBase.castShadow = fgBase.receiveShadow = true;
+scene.add(fgBase);
+
+/* 平面导览图 —— 序厅这块**落地双面牌**：正面朝大门(+Z)、背面朝主厅(−Z)。
+   ── 为什么做成双面 ───────────────────────────────────────────────
+   · 观众从大门（z=26）进来时看正面；从主厅方向（z=14）折返时看背面。序厅是唯一同时望得见
+     来路与去路的厅，这块平面图正是「先平面定位」的那张，两面都得能用。
+   · plate() 造的是 PlaneGeometry + MeshBasicMaterial，材质默认 **FrontSide —— 只画正面**，
+     所以背面不是「同一块板翻过去」，而是**另立一片**同样的贴图、绕 Y 转 π（第 7 个参 Math.PI）。
+   · 背面的 rotY=π **不镜像**：绕 Y 转 180° 把纹理本地 +x 映到世界 −x，而站在北侧看的观众
+     屏幕右向也正好是世界 −x，两者相消 —— 背面看到的是不镜像的正图（已渲染核对）。
+   · 两片在 z 上各退 0.01（合计错开 0.02）防共面闪烁。
+   ⚠️ 原来的「实心背板 + 两条腿」撑法**必须换掉** —— 背板是一整块 Box，会把背面画面整个盖住；
+      现改成「两立柱分列牌宽之外 + 顶部细横梁 + 前后两条落地横脚 + 柱脚短靴」，正反两面都不被遮。
+   ⚠️ 立位**保持原位不动**（与第一单元同侧、序厅西半边，进门即可看到）：板心 (−4.2, 1.55, 22.72)。
+   ⚠️ 板宽高比必须与画布严格相等（760:700）—— 由 G_PH 从 G_PW 派生保证，改宽就得同步改 canvas 像素。
+   ⚠️ 它立在序厅中央偏西、四周没有要看的画心，所以**不受**内厅那 8 块展牌「板顶必须低于视高」
+      的约束；那条约束是给「站在画前别挡住身后画作」的展牌用的，别套到这里。
+   ⚠️ `plate()` 的参数序是 `(tex, pw, ph, x, y, z, rotY = 0, rotX = 0)`，**别错位** —— 这里曾经
+      误写成 `-4.2, 22.6, 0`（于是 y=22.6 吊到天花板之上、z=0 落进八角主厅正中心），序厅里
+      根本看不到这块牌子。 */
+const G_PW = 1.70;
+const G_PH = G_PW * 700 / 760;                        // 1.56579：由画布 760×700 反推（原写死 1.57 是它的四舍五入）
+const G_X = -4.2, G_Z = 22.72, G_Y = 1.55;            // 牌心 —— 原位不动
+const G_GAP = 0.010;                                  // 正反两片各退 0.01，合计错开 0.02，防共面闪烁
+const G_TOP = G_Y + G_PH / 2;                         // 牌顶 2.3329
+const guideTex = canvasTex(760, 700, (ctx, W, H) => {
+  ctx.fillStyle = '#efe6d2'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(90,75,45,0.5)'; ctx.lineWidth = 4; ctx.strokeRect(16, 16, W-32, H-32);
+  ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'center';
+  ctx.font = `bold 46px ${CJK}`; ctx.fillText('平 面 导 览 图', W/2, 76);
+  const s = 8.4, cx0 = -0.4, cz0 = 4.5;
+  const px = x => 380 + (x - cx0) * s, py = z => 340 + (z - cz0) * s;
+  const box = (x0, x1, z0, z1, fill, label) => {
+    ctx.fillStyle = fill;
+    ctx.fillRect(px(x0), py(z0), (x1-x0)*s, (z1-z0)*s);
+    ctx.strokeStyle = '#6b5b3c'; ctx.lineWidth = 2;
+    ctx.strokeRect(px(x0), py(z0), (x1-x0)*s, (z1-z0)*s);
+    if (label) {
+      ctx.fillStyle = '#3a3323'; ctx.font = `bold 21px ${CJK}`;
+      ctx.fillText(label, (px(x0)+px(x1))/2, (py(z0)+py(z1))/2 + 8);
+    }
+  };
+  box(-19, -6.5, 16.5, 25.5, '#e6dcc4', '第一单元');
+  box(-10, 10, -10, 10, '#ded2b6', '第三单元');
+  box(-6.5, 6.5, -26, -14, '#e6dcc4', '第二单元');
+  box(6.5, 18.5, -25.5, -14.5, '#e6dcc4', '第四单元');
+  box(-6.5, 6.5, 14, 26, '#efe3c8', '序厅');
+  /* 路线 */
+  ctx.strokeStyle = '#b6873a'; ctx.lineWidth = 3; ctx.setLineDash([9, 7]);
+  ctx.beginPath();
+  ctx.moveTo(px(0), py(33)); ctx.lineTo(px(0), py(-20));
+  ctx.moveTo(px(0), py(21)); ctx.lineTo(px(-12.5), py(21));
+  ctx.moveTo(px(0), py(-20)); ctx.lineTo(px(12.5), py(-20));
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#b6873a'; ctx.font = `bold 20px ${CJK}`;
+  ctx.fillText('起点', px(0), py(34.6));
+});
+/* 正面：法线 +Z，朝大门，进门第一眼看到 */
+plate(guideTex, G_PW, G_PH, G_X, G_Y, G_Z + G_GAP);
+/* 背面：rotY=π，法线 −Z，朝主厅，给从主厅方向折返的人看（同图，不镜像） */
+plate(guideTex, G_PW, G_PH, G_X, G_Y, G_Z - G_GAP, Math.PI);
+
+/* —— 木架：两根立柱分列牌宽**之外** + 顶部细横梁 + 前后两条落地横脚 + 柱脚短靴。
+   原方案是一整块实心背板 BoxGeometry(1.84, 1.71, 0.10) —— 板子改成双面后它会盖住背面画面，
+   必须换成这套「不挡任何一面」的框式支撑（与剖面游览图曾经那套同一形制）。 */
+const G_OFF  = G_PW / 2 + 0.08;                       // 立柱中线离牌心 0.93：落在牌宽之外
+const G_BEAM = G_PW + 0.30;                           // 横梁 / 横脚长 2.00：两端各出头，把两柱连起来
+const G_TOPH = G_TOP + 0.10;                          // 立柱从地面算起 2.4329：略高过牌顶，给顶梁留位
+[-1, 1].forEach(s => {                                // 两根立柱（立在牌宽之外，不压画面）
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.09, G_TOPH, 0.09), WOOD_MAT);
+  post.position.set(G_X + s * G_OFF, G_TOPH / 2, G_Z);
+  post.castShadow = post.receiveShadow = true;
+  scene.add(post);
+});
+const gBeam = new THREE.Mesh(new THREE.BoxGeometry(G_BEAM, 0.09, 0.09), WOOD_MAT);
+gBeam.position.set(G_X, G_TOP + 0.05, G_Z);           // 梁底 2.3379，略高于牌顶 2.3329，不压画面顶边
+gBeam.castShadow = gBeam.receiveShadow = true;
+scene.add(gBeam);
+[-1, 1].forEach(s => {                                // 前后两条落地横脚 → 防前后倾倒
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(G_BEAM, 0.10, 0.12), WOOD_MAT);
+  rail.position.set(G_X, 0.05, G_Z + s * 0.20);
+  rail.castShadow = rail.receiveShadow = true;
+  scene.add(rail);
+});
+[-1, 1].forEach(s => {                                // 每根柱脚的短靴：跨接前后两脚
+  const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.46), WOOD_MAT);
+  shoe.position.set(G_X + s * G_OFF, 0.06, G_Z);
+  shoe.castShadow = shoe.receiveShadow = true;
+  scene.add(shoe);
+});
+
+/* 剖面游览图 —— 把甬道与五个厅按参观动线「展开」成一条水平剖面长卷，补上序厅缺的那块展牌。
+   （与序厅「平面导览图」互为配套：一张平面、一张剖面。）
+   ── 为什么挂在序厅北墙的西段 ──────────────────────────────────────
+   · 序厅北墙（z=14）就是通往八角主厅的那面墙 —— 观众从大门进来，迎面看到的正是它；把「全程
+     预告」放在即将穿过的门洞旁边，读序也顺（先在平面导览牌上定好位，再在这块牌上看剖面动线）。
+   · 板心 (−4.60, 1.70, 14.15)，rotY 缺省 0 → 法线 +Z，面朝厅内（朝南），正对从大门进来的观众。
+   ── 为什么只能取 3.40m 宽、板心必须压到 −4.60 ──────────────────────
+   北墙西段能挂板的**干净面只剩 x ∈ [−6.39, −2.79]**（3.60m），两头各被一样东西占住：
+     · 东头：主厅门洞 |x| < 1.4，再被门套外扩到 ±1.9；
+     · 再往东：八边形斜墙从 x = −2.79 起把墙面往南推（见下方八边形那条 ⚠️）。
+   于是牌取 3.40m、板心压到 −4.60 → 板占 x ∈ [−6.30, −2.90]，两边各留 0.09 富余。
+   ⚠️ 板面 1760×600（宽高比 2.93333），改展牌宽高就得同步改 canvas 像素，否则图被拉变形。
+     现取 3.40 × 1.159（高 ≈ 3.40×600/1760）。
+   ⚠️ **贴面间隙统一 0.04**（与 u1/u2/u3/u4 四条标题带、内厅八块展牌同规格）：北墙内表面在
+      z = 14 + WALL_T/2 = 14.11，板落 z = 14.15 —— 这 0.04 是「牌面贴到既有墙面」时留的缝，别改。
+      上面「干净面 x ∈ [−6.39, −2.79]」这个结论将来若要再往北墙挂东西，得先照这个数核一遍。
+   ⚠️ 板贴墙、人站不到跟前，**不需要 blocker**：序厅 WALK 是 z ≥ 15.2，已经把人隔在 1.05m 外。
+   ⚠️ `plate()` 的参数序是 `(tex, pw, ph, x, y, z, rotY = 0, rotX = 0)`，**别错位** ——
+      序厅「平面导览图」那块曾经把 (x,y,z) 写成 (x,z,y)，板子被吊到天花板之上 / 落进别厅。
+   ⚠️ **八边形捅进序厅 / 内厅**（第 26 轮发现的老问题，不是本次引入的，改前请先掂量）：
+      `COLORS.forEach` 里八边形墙板的宽取的是 `2·MUSE_R·tan(π/8)` = 11.598，而真八边形棱长是
+      `2·MUSE_R·sin(π/8)` = 10.715。宽出来的 0.88m 是**故意的** —— 用 tan 才能让相邻墙板
+      在八个角上严丝合缝、不留 V 形缝。代价是：**这套墙实际是个外接圆半径 15.15 的八边形，
+      不是 14**。它的南北两顶点落在 (0, ±15.15)，而序厅北墙、内厅南墙都建在 z = ∓14 ——
+      于是两条斜墙**各捅进序厅和内厅 1.05m**，在门洞两侧各露出一片斜着的绿墙。
+      门套 x ∈ [−1.9, 1.9] 只盖住中间一段，捅出来的部分比它宽 0.9m，盖不住。
+      西侧那条斜墙的侵入区是 x ∈ [−2.79, 0]，正好是本板东端的边界 —— 板只取 3.40m 就是为了停在
+      它西边。本处**不动**八边形本身：改它要连带动 `WALK` 的 `{circle:12.6}`、`STAND_R`、
+      两个门套和 `roof8`，风险远大于收益。
+      实测：站在序厅 (−4.15, 1.70, 19.5) 朝北，斜墙在屏幕右侧 12°~25° 处显形。 */
+const sectionTex = canvasTex(1760, 600, (ctx, W, H) => {
+  /* ==================== 剖面游览图 · SECTION 动线图 ====================
+     1760×600（展牌 3.40m 宽 × 1.159m 高，贴在序厅北墙西段，1px ≈ 1.93mm；改展牌尺寸时这两句同步）。把单层馆的六个单元沿参观
+     动线「展开」成一条剖面长卷：地面线贯穿全图，每个厅 = 地面线 + 左右墙 + 天花，
+     厅间留缝，金色虚线沿地面串联、箭头示前进方向。
+     全部确定性绘制（无 Math.random，伪随机用固定数组 / Math.sin）。 */
+  const INK = '#3a3323', INK2 = '#7c735c', GOLD = '#b6873a',
+        PAPER = '#efe6d2', FRAME = 'rgba(90,75,45,0.5)';
+  /* 馆内八色（与 index.html 的 COLORS 同值），用于标本墙 / 色卡墙 */
+  const SW = ['#3C4654', '#D6ECF0', '#BCE672', '#1E3C72',
+              '#E4C6D0', '#A29B7C', '#425066', '#FFA631'];
+
+  /* 剖面几何：地平线 GY，墙顶(天花) WT，高 GH；八角顶脊 RIDGE */
+  const GY = 428, WT = 214, GH = GY - WT, RIDGE = 138, WT_T = 7;
+
+  const txt = (s, x, y, font, color, align) => {
+    ctx.font = font; ctx.fillStyle = color;
+    ctx.textAlign = align || 'center'; ctx.fillText(s, x, y); ctx.textAlign = 'left';
+  };
+  const arrow = (x, y, s) => {                       // 右向箭头（带纸色底托，不与虚线糊在一起）
+    ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(x, y, s * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x - s, y - s * 0.66); ctx.lineTo(x + s * 1.05, y);
+    ctx.lineTo(x - s, y + s * 0.66); ctx.closePath();
+    ctx.fillStyle = GOLD; ctx.fill();
+  };
+  const swatches = (x, y, w, h, n) => {              // 一排色块（标本墙 / 色卡墙）
+    const gap = 3, bw = (w - gap * (n - 1)) / n;
+    for (let i = 0; i < n; i++) {
+      const bx = x + i * (bw + gap);
+      ctx.fillStyle = SW[i % SW.length]; ctx.fillRect(bx, y, bw, h);
+      ctx.strokeStyle = 'rgba(40,32,20,0.35)'; ctx.lineWidth = 1.5; ctx.strokeRect(bx, y, bw, h);
+    }
+  };
+
+  /* ---------- 纸底 + 双线外框 ---------- */
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = FRAME; ctx.lineWidth = 5; ctx.strokeRect(15, 15, W - 30, H - 30);
+  ctx.strokeStyle = 'rgba(90,75,45,0.22)'; ctx.lineWidth = 1.4; ctx.strokeRect(25, 25, W - 50, H - 50);
+
+  /* ---------- 版头 ---------- */
+  ctx.textBaseline = 'alphabetic';
+  txt('剖面游览图', 50, 76, `bold 46px ${CJK}`, INK, 'left');
+  ctx.fillStyle = GOLD; ctx.fillRect(52, 88, 122, 4);       // 标题下金色短饰线
+  txt('SECTION · 参观动线', 322, 74, `21px ${CJK}`, INK2, 'left');
+  txt('金色虚线 = 参观动线　→', W - 52, 70, `20px ${CJK}`, INK2, 'right');
+  txt('各厅剖面墙高 4.6m（等比）', W - 52, 96, `20px ${CJK}`, INK2, 'right');
+  ctx.strokeStyle = 'rgba(90,75,45,0.3)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(40, 112); ctx.lineTo(W - 40, 112); ctx.stroke();
+
+  /* ---------- 贯穿全图的地平线（六个厅的地面线连成一条） ---------- */
+  ctx.strokeStyle = INK; ctx.lineWidth = 3.4;
+  ctx.beginPath(); ctx.moveTo(40, GY); ctx.lineTo(W - 40, GY); ctx.stroke();
+
+  /* ================= 各厅：位置与淡填充色 ================= */
+  const halls = [
+    { x0:  40, x1: 240, tint: '#ece4d0' },   // ① 甬道（室外）
+    { x0: 258, x1: 544, tint: '#e8ddc6' },   // ② 序厅
+    { x0: 562, x1: 844, tint: '#e4ddc9' },   // ③ 第一单元 · 色源
+    { x0: 862, x1:1180, tint: '#dde2dd' },   // ④ 第三单元 · 物色（八角主厅）
+    { x0:1198, x1:1456, tint: '#e9e1d2' },   // ⑤ 第二单元 · 绘事
+    { x0:1474, x1:1720, tint: '#e2e3da' },   // ⑥ 第四单元 · 感知
+  ];
+
+  /* ---------- ① 甬道 · 室外通道（无墙无顶，只有两盏灯柱） ---------- */
+  (() => {
+    const h = halls[0];
+    ctx.fillStyle = h.tint; ctx.fillRect(h.x0, GY - 26, h.x1 - h.x0, 26);
+    [h.x0 + 62, h.x1 - 62].forEach((px) => {
+      ctx.strokeStyle = '#4a4232'; ctx.lineWidth = 3.4;
+      ctx.beginPath(); ctx.moveTo(px, GY); ctx.lineTo(px, GY - 132); ctx.stroke();
+      ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(px, GY - 140, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(182,135,58,0.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, GY - 140, 16, 0, Math.PI * 2); ctx.stroke();
+    });
+  })();
+
+  /* ---------- ② 序厅：东墙《月曼清游图》喷绘长墙 + 前言展板 + 导览牌 ---------- */
+  (() => {
+    const h = halls[1];
+    ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
+    ctx.fillStyle = h.tint; ctx.fillRect(h.x0, WT, h.x1 - h.x0, GH);
+    /* 喷绘长墙：一条长横带（11.4m 画心） */
+    const bx = h.x0 + 14, bw = h.x1 - h.x0 - 28, by = WT + 20, bh = 64;
+    ctx.fillStyle = '#d8c9a6'; ctx.fillRect(bx, by, bw, bh);
+    for (let i = 0; i < 9; i++) {                    // 简笔山形（确定性）
+      const px = bx + 20 + i * (bw - 40) / 8, ph = 14 + ((i * 37) % 5) * 6;
+      ctx.strokeStyle = 'rgba(120,98,60,0.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(px - 12, by + bh - 8);
+      ctx.lineTo(px, by + bh - 8 - ph); ctx.lineTo(px + 12, by + bh - 8); ctx.stroke();
+    }
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 3; ctx.strokeRect(bx, by, bw, bh);
+    txt('《月曼清游图》长墙 11.4m', h.x0 + (h.x1 - h.x0) / 2, by + bh + 19, `20px ${CJK}`, INK2);
+    /* 前言展板（立地） */
+    const fb = { x: h.x0 + 46, w: 84, y: GY - 96, h: 94 };
+    ctx.fillStyle = PAPER; ctx.fillRect(fb.x, fb.y, fb.w, fb.h);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(fb.x, fb.y, fb.w, fb.h);
+    txt('前言', fb.x + fb.w / 2, fb.y + 26, `bold 20px ${CJK}`, INK);
+    ctx.strokeStyle = 'rgba(90,75,45,0.5)'; ctx.lineWidth = 1.4;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(fb.x + 12, fb.y + 40 + i * 12);
+      ctx.lineTo(fb.x + fb.w - 12, fb.y + 40 + i * 12); ctx.stroke();
+    }
+    /* 导览牌（细柱 + 牌面） */
+    const gx = h.x1 - 52;
+    ctx.strokeStyle = '#4a4232'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(gx, GY); ctx.lineTo(gx, GY - 74); ctx.stroke();
+    ctx.fillStyle = '#e6dcc4'; ctx.fillRect(gx - 30, GY - 108, 60, 38);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(gx - 30, GY - 108, 60, 38);
+    txt('导览', gx, GY - 83, `bold 20px ${CJK}`, INK);
+    ctx.restore();
+  })();
+
+  /* ---------- ③ 第一单元 · 色源：西墙标本墙 + 4 工序台 + 4 地平矮展柜 ---------- */
+  (() => {
+    const h = halls[2];
+    ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
+    ctx.fillStyle = h.tint; ctx.fillRect(h.x0, WT, h.x1 - h.x0, GH);
+    /* 西墙标本墙：一条排满色块的横带 */
+    swatches(h.x0 + 16, WT + 30, h.x1 - h.x0 - 32, 52, 8);
+    txt('西墙 · 标本墙', h.x0 + (h.x1 - h.x0) / 2, WT + 26, `20px ${CJK}`, INK2);
+    /* 4 座工序台（后列，带桌腿与道具） */
+    [608, 669, 730, 791].forEach((cx) => {
+      ctx.fillStyle = '#d7ceb8'; ctx.fillRect(cx - 21, GY - 30, 42, 30);
+      ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(cx - 21, GY - 30, 42, 30);
+      ctx.fillStyle = '#efe9db'; ctx.fillRect(cx - 24, GY - 34, 48, 6);
+      ctx.strokeStyle = INK; ctx.strokeRect(cx - 24, GY - 34, 48, 6);
+      ctx.fillStyle = '#8a7d63'; ctx.beginPath(); ctx.arc(cx - 8, GY - 39, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 8, GY - 39, 4, 0, Math.PI * 2); ctx.fill();
+    });
+    /* 4 座地平矮展柜（前列，错开半个柱距） */
+    [641, 702, 763, 824].forEach((cx) => {
+      ctx.fillStyle = '#e7e1d1'; ctx.fillRect(cx - 28, GY - 15, 56, 15);
+      ctx.strokeStyle = 'rgba(60,50,32,0.7)'; ctx.lineWidth = 2; ctx.strokeRect(cx - 28, GY - 15, 56, 15);
+      ctx.fillStyle = 'rgba(150,180,190,0.35)'; ctx.fillRect(cx - 24, GY - 20, 48, 6);
+    });
+    ctx.restore();
+  })();
+
+  /* ---------- ④ 第三单元 · 物色（八角主厅）：八角坡顶 + 8 展台 + 中央信息台 ---------- */
+  (() => {
+    const h = halls[3], cx = (h.x0 + h.x1) / 2;
+    ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
+    ctx.fillStyle = h.tint; ctx.fillRect(h.x0, WT, h.x1 - h.x0, GH);
+    /* 8 座展台绕一圈（左右各四，中间留给信息台） */
+    [880, 914, 948, 982, 1060, 1094, 1128, 1162].forEach((px) => {
+      ctx.fillStyle = '#d9d2c0'; ctx.fillRect(px - 10, GY - 26, 20, 26);
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.strokeRect(px - 10, GY - 26, 20, 26);
+      ctx.fillStyle = '#a89b7e'; ctx.fillRect(px - 6, GY - 32, 12, 6);
+    });
+    /* 中央信息台 */
+    ctx.fillStyle = '#d9d2c0'; ctx.fillRect(cx - 28, GY - 34, 56, 34);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.2; ctx.strokeRect(cx - 28, GY - 34, 56, 34);
+    ctx.fillStyle = '#11161c'; ctx.fillRect(cx - 18, GY - 64, 36, 26);
+    ctx.strokeStyle = '#2b3a48'; ctx.lineWidth = 2; ctx.strokeRect(cx - 18, GY - 64, 36, 26);
+    ctx.fillStyle = '#8fd6ff'; ctx.fillRect(cx - 12, GY - 58, 24, 3);
+    ctx.fillRect(cx - 12, GY - 52, 16, 3);
+    txt('信息台', cx, GY - 72, `20px ${CJK}`, INK2);
+    ctx.restore();
+    /* 八角坡顶（与其它厅的平顶区分）：画在最后，压住墙顶以上的空当 */
+    ctx.beginPath();
+    ctx.moveTo(h.x0, WT); ctx.lineTo(cx - 50, RIDGE); ctx.lineTo(cx + 50, RIDGE);
+    ctx.lineTo(h.x1, WT); ctx.closePath();
+    ctx.fillStyle = '#e7ebe8'; ctx.fill();
+    ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.4;                 // 脊饰
+    ctx.beginPath(); ctx.moveTo(cx, RIDGE); ctx.lineTo(cx, RIDGE - 14); ctx.stroke();
+    ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(cx, RIDGE - 17, 4, 0, Math.PI * 2); ctx.fill();
+  })();
+
+  /* ---------- ⑤ 第二单元 · 绘事：墙上金框画 + 画前 8 块小展牌 ---------- */
+  (() => {
+    const h = halls[4], cx = (h.x0 + h.x1) / 2;
+    ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
+    ctx.fillStyle = h.tint; ctx.fillRect(h.x0, WT, h.x1 - h.x0, GH);
+    /* 金框画（挂画：两条吊线） */
+    const px = cx - 52, py = WT + 30, pw = 104, ph = 130;
+    ctx.strokeStyle = 'rgba(60,50,32,0.4)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(px + 12, WT); ctx.lineTo(px + 12, py);
+    ctx.moveTo(px + pw - 12, WT); ctx.lineTo(px + pw - 12, py); ctx.stroke();
+    ctx.fillStyle = '#cbb98f'; ctx.fillRect(px, py, pw, ph);
+    for (let i = 0; i < 5; i++) {                                // 画心简笔
+      const lx = px + 16 + i * (pw - 32) / 4;
+      ctx.strokeStyle = 'rgba(110,90,55,0.45)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(lx - 8, py + ph - 22);
+      ctx.lineTo(lx, py + ph - 34 - ((i * 29) % 4) * 5);
+      ctx.lineTo(lx + 8, py + ph - 22); ctx.stroke();
+    }
+    ctx.fillStyle = '#9c3b2e'; ctx.fillRect(px + pw - 26, py + ph - 26, 12, 12);  // 朱印
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 5; ctx.strokeRect(px, py, pw, ph);
+    ctx.strokeStyle = 'rgba(60,50,32,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(px - 3, py - 3, pw + 6, ph + 6);
+    /* 画前 8 块小展牌（立式） */
+    for (let i = 0; i < 8; i++) {
+      const sx = 1220 + i * (1434 - 1220) / 7;
+      ctx.strokeStyle = '#4a4232'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx, GY); ctx.lineTo(sx, GY - 38); ctx.stroke();
+      ctx.fillStyle = '#efe9db'; ctx.fillRect(sx - 8, GY - 54, 16, 18);
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.strokeRect(sx - 8, GY - 54, 16, 18);
+    }
+    ctx.restore();
+  })();
+
+  /* ---------- ⑥ 第四单元 · 感知：色卡墙 + 互动屏 + 留言墙 ---------- */
+  (() => {
+    const h = halls[5];
+    ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
+    ctx.fillStyle = h.tint; ctx.fillRect(h.x0, WT, h.x1 - h.x0, GH);
+    /* 色卡墙：一条色块横带 */
+    swatches(h.x0 + 16, WT + 30, h.x1 - h.x0 - 32, 52, 8);
+    txt('色卡墙', h.x0 + (h.x1 - h.x0) / 2, WT + 26, `20px ${CJK}`, INK2);
+    /* 留言墙（贴满便利贴，确定性角度） */
+    const mx = h.x0 + 20, my = GY - 110, mw = 96, mh = 76;
+    ctx.fillStyle = '#e8dcc2'; ctx.fillRect(mx, my, mw, mh);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(mx, my, mw, mh);
+    const notes = ['#f2e6b8', '#e7d3c0', '#d8e2c4', '#e3d5e6', '#f0dcc2', '#d7e0e8'];
+    for (let i = 0; i < 9; i++) {
+      const nx = mx + 18 + (i % 3) * 30, ny = my + 16 + Math.floor(i / 3) * 22;
+      ctx.save(); ctx.translate(nx, ny); ctx.rotate(((i * 37) % 11 - 5) * Math.PI / 180);
+      ctx.fillStyle = notes[i % notes.length]; ctx.fillRect(-11, -8, 22, 16);
+      ctx.restore();
+    }
+    txt('留言墙', mx + mw / 2, my - 8, `20px ${CJK}`, INK2);
+    /* 互动屏 */
+    const sx = h.x1 - 62;
+    ctx.fillStyle = '#11161c'; ctx.fillRect(sx - 26, GY - 100, 52, 68);
+    ctx.strokeStyle = '#2b3a48'; ctx.lineWidth = 2.4; ctx.strokeRect(sx - 26, GY - 100, 52, 68);
+    ctx.fillStyle = '#8fd6ff'; ctx.fillRect(sx - 18, GY - 90, 36, 3);
+    ctx.fillRect(sx - 18, GY - 82, 26, 3); ctx.fillRect(sx - 18, GY - 74, 30, 3);
+    ctx.strokeStyle = '#4a4232'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sx, GY - 32); ctx.lineTo(sx, GY); ctx.stroke();
+    txt('互动屏', sx, GY - 106, `20px ${CJK}`, INK2);
+    ctx.restore();
+  })();
+
+  /* ================= 左右墙 + 平天花（②~⑥ 室内厅；① 甬道室外不画） ================= */
+  for (let k = 1; k < halls.length; k++) {
+    const h = halls[k];
+    ctx.fillStyle = INK;
+    ctx.fillRect(h.x0, WT, WT_T, GH);          // 左墙
+    ctx.fillRect(h.x1 - WT_T, WT, WT_T, GH);   // 右墙
+    if (k !== 3) ctx.fillRect(h.x0, WT, h.x1 - h.x0, 4);   // 平天花（八角主厅改用坡顶）
+  }
+
+  /* ================= 金色虚线动线（沿地面串联六厅）+ 箭头 ================= */
+  ctx.save();
+  ctx.setLineDash([11, 9]); ctx.strokeStyle = GOLD; ctx.lineWidth = 3.4;
+  ctx.beginPath(); ctx.moveTo(52, GY); ctx.lineTo(1716, GY); ctx.stroke();
+  ctx.restore();
+  /* 起点标记 + 每厅中心一个前进箭头 + 末端出口箭头 */
+  ctx.strokeStyle = GOLD; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(52, GY, 7, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(52, GY, 2.6, 0, Math.PI * 2); ctx.fill();
+  halls.forEach((h) => arrow((h.x0 + h.x1) / 2, GY, 8));
+  arrow(1734, GY, 10);
+
+  /* ================= 各厅下方：序号(金圈) + 厅名 + 单元小注 ================= */
+  const cap = [
+    { n: 1, name: '甬道',       sub: '起点 · ENTRY' },
+    { n: 2, name: '序厅',       sub: '前言长墙 · PROLOGUE' },
+    { n: 3, name: '色源・万物生', sub: '第一单元 · SOURCES' },
+    { n: 4, name: '物色・入人间', sub: '第三单元 · IN LIFE' },
+    { n: 5, name: '绘事・绢上观', sub: '第二单元 · ON SILK' },
+    { n: 6, name: '感知・互动',   sub: '第四单元 · PERCEIVE' },
+  ];
+  halls.forEach((h, i) => {
+    const cx = (h.x0 + h.x1) / 2, c = cap[i];
+    ctx.beginPath(); ctx.arc(cx, 464, 15, 0, Math.PI * 2);
+    ctx.fillStyle = GOLD; ctx.fill();
+    txt(String(c.n), cx, 471, `bold 20px ${CJK}`, PAPER);
+    txt(c.name, cx, 506, `bold 26px ${CJK}`, INK);
+    txt(c.sub, cx, 530, `20px ${CJK}`, INK2);
+  });
+});
+/* ================= 剖面游览图 · 贴序厅北墙西段（单面，法线 +Z 朝南）================= */
+/* 尺寸 3.40 × 1.159、板心 (−4.60, 1.70, 14.15) 的来由、以及「为什么不做成双面」，
+   见上方「剖面游览图」那段长注释。板贴墙、不落地，所以**不加 blocker**。 */
+plate(sectionTex, 3.40, 1.159, -4.60, 1.70, 14.15);
+
+
+/* ================= 内厅（第二单元 · 绘事・绢上观）================= */
+buildRoom({ cx:0, cz:-20, w:13, d:12, wall:'#8f8b83', floor:'#c9c2b4', doors:[
+  { side:'+z', at:0,   half:1.4, top:3.1 },  // → 八角主厅
+  { side:'+x', at:-20, half:1.5, top:3.1 }   // → 第四单元
+]});
+buildPortal(0, -14.15, 1.4, 3.1, WALL_H, 1.5);
+
+/* 主展墙：《月曼清游图》（占位画面，真图到位后自动替换）
+   ⚠️ 整组（画心 + 画框 + 天杆 + 二绳 + 拾取盒）**作为一个整体挂在 PAINT_Y 上**：
+      画心 7.2×3.1 中心在 y=2.65 → 画心 1.10~4.20，天杆顶 4.575，天花板 4.60（余 2.5cm）。
+      不能再高了。画心上移是为了躲开前面 8 块展牌（见 COLORS 下方的算式），
+      同时也更像一幅真正的挂轴：上不顶天、下留 1.1m 给展牌与观众。 */
+const paintCanvas = document.createElement('canvas');
+paintCanvas.width = 1440; paintCanvas.height = 620;
+const paintTex = new THREE.CanvasTexture(paintCanvas);
+paintTex.colorSpace = THREE.SRGBColorSpace; paintTex.anisotropy = 4;
+const PAINT_Y = 2.65;                                   // 画心中心高度（原 2.15）
+plate(paintTex, 7.2, 3.1, 0, PAINT_Y, -25.83);
+/* 装裱：金线画框 + 天杆 + 二绳 */
+const frameMat = new THREE.MeshStandardMaterial({ color:'#a8853f', metalness:0.6, roughness:0.36 });
+[[7.72,0.16,0.14, 0, PAINT_Y+1.64,-25.80], [7.72,0.16,0.14, 0, PAINT_Y-1.64,-25.80],
+ [0.16,3.44,0.14,-3.70,PAINT_Y,-25.80], [0.16,3.44,0.14, 3.70,PAINT_Y,-25.80]].forEach(a => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(a[0], a[1], a[2]), frameMat);
+  m.position.set(a[3], a[4], a[5]); m.castShadow = true; scene.add(m);
+});
+const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 8.2, 16), frameMat);
+rod.rotation.z = Math.PI/2; rod.position.set(0, PAINT_Y+1.87, -25.8); scene.add(rod);
+[-3.2, 3.2].forEach(x => {
+  const c = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.24, 0.02),
+    new THREE.MeshStandardMaterial({ color:'#6b5b3c', roughness:0.8 }));
+  c.position.set(x, PAINT_Y+1.76, -25.8); scene.add(c);
+});
+/* 画作拾取代理 */
+const paintHb = new THREE.Mesh(new THREE.BoxGeometry(7.6, 3.6, 0.4),
+  new THREE.MeshBasicMaterial({ visible:false }));
+paintHb.position.set(0, PAINT_Y, -25.7);
+paintHb.userData.kind = 'paint';
+scene.add(paintHb); hitboxes.push(paintHb);
+
+/* 8 块低斜展牌：色块 + 色名 + 画中位置 + 释义
+   ── 为什么板子这么矮、画又挂得那么高 ──────────────────────────
+   展牌在 z=-23.0，画心在 z=-25.83，观众眼睛 y≈1.70。板沿视线张角 ∝ (1.70-y)/距离：
+   要「板顶落在画心下沿**之下**」，在观众退到内厅最南端（z=-15.2，距板 7.8m、距画 10.63m）时最吃紧：
+       (1.70 - 板顶) / 7.8  >  (1.70 - 画心下沿) / 10.63
+   代入 板顶 0.98、画心下沿 1.10 → 0.0923 > 0.0564 ✓（留 2° 余量，屏幕上约 3 行字高）
+   反之若板顶 1.96 > 视高 1.70，则不论把板挪前挪后、挪左挪右，画心下半幅都会被吃掉。
+   ⚠️ 板面是 512×279（= 1.10:0.60），改宽高比要同步改这里的 canvas 尺寸，否则字被拉扁。 */
+PLATES.forEach((p, k) => {
+  const c = COLOR_BY_ID[p.id];
+  const x = -5.6 + k * 1.6;
+  const tex = canvasTex(512, 279, (ctx, W, H) => {
+    ctx.fillStyle = '#efe6d2'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 3; ctx.strokeRect(9, 9, W-18, H-18);
+    ctx.fillStyle = c.hex; ctx.fillRect(28, 22, W-56, 96);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = c.light ? '#2b2417' : '#ffffff';
+    ctx.font = `bold 48px ${CJK}`; ctx.fillText(c.name, W/2, 90);
+    /* 释义最长 12 字（25px×12=300 < 432 可用宽）、画中位置最长 14 字（21px×14=294 < 464）
+       —— 都放得下单行，故不调 wrapCJK；若日后改文案超过这个字数，须改小字号或加行。 */
+    ctx.fillStyle = '#3a3323'; ctx.font = `25px ${CJK}`;
+    ctx.fillText(p.txt, W/2, 162);
+    ctx.fillStyle = '#7c735c'; ctx.font = `21px ${CJK}`;
+    ctx.fillText('画中位置：' + p.pos, W/2, 226);
+  });
+  buildStandBoard(tex, 1.10, 0.60, x, -23.0, 0);
+  const hb = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.66, 0.3),
+    new THREE.MeshBasicMaterial({ visible:false }));
+  hb.position.set(x, 0.70, -22.96);
+  hb.userData.kind = 'plate'; hb.userData.id = p.id;
+  scene.add(hb); hitboxes.push(hb);
+});
+/* 内厅标题带：与第一/第四单元同款（5.6×1.2、深底金字、y=3.4），补上第二单元。
+   挂**西墙**：内厅四面里只有西墙是通长 12m 的整面实墙，5.6m 放得下；
+   南墙被门洞切剩 4.5m、东墙有门切剩 4.5m、北墙被画心占掉中间 7.2m，都放不下 5.6m。
+   x 取 −6.35 = 西墙内表面 −6.39 外 0.04 —— 与 u1 的 (−18.85 / −18.89)、
+   u4 的 (18.35 / 18.39) 是同一个贴面间隙，别再写成 −6.26（会离墙浮出 13cm）。
+   ⚠️ 这里原本还挂着一条门楣小带 `bandTex(..., 3.4, 0.73, 0, 3.62, -14.20, Math.PI)`：
+      它落在 buildPortal(0, −14.15, …, depth:1.5) 的门楣木盒
+      [z −14.9~−13.4, y 3.09~4.61, x −1.9~1.9] **里侧** —— 被木料整个埋住，从来没显示过。
+      与序厅匾额「z 必须落在门套 26.45 之外」是同一类坑，当时避开了、这里漏了。
+      大带已标明第二单元，故直接删除，不再补挂（u1/u4 也都没有门楣）。 */
+plate(textBoardTex({ w:1024, h:220, bg:'#2a241b', fg:'#e8cf94', title:UNITS.u2.cn,
+  sub:UNITS.u2.en, titleSize:60, align:'center' }),
+  5.6, 1.2, -6.35, 3.4, -20, Math.PI/2);       /* 西墙（内表面 x=−6.39），面朝 +X */
+/* ================= 辅助展板（内厅西墙）· 古色之用 =================
+   板面 2.4×1.71 m，画布 1200×855（1200:855 = 2.4:1.71，比例锁死才不会把字拉变形）。
+   板心 (-6.2, 1.275, -20)，rotY=π/2 → 法线 +X，面朝厅内；底沿 1.275−0.855 = 0.42，
+   正好坐回底座顶面 0.42（底座 BoxGeometry(0.3,0.42,2.5) @(-6.24,0.21,-20)，
+   z∈[-21.25,-18.75] 包住板宽 2.4 的 z∈[-21.2,-18.8]）。
+   配色/构图沿用 textBoardTex（纸底 #efe6d2、正文 #2f2a1e、4px 外框内缩 16）；
+   五则「序号+小标题」用金褐 #8a6a2f 粗体，正文常规体，则间留半个行高；落款前再一条分隔线。
+   ⚠️ 正文 25px / 行高 45 / 则间 19 这三个数是按「五则共 10 行、底部留白 34px」选定的；
+      改文案字数（尤其第二则最长）要回头重算，否则落款会顶出外框。
+   ⚠️ 跨字体换行：正文含全角汉字与全角标点，主流 CJK 字体每字 1em，本机与 macOS 结果应一致；
+      但代码没做「两遍测量自适应」，若某字体把某则挤成 3 行（共 11 行），落款会下移约 45px。 */
+plate(canvasTex(1200, 855, (ctx, W, H) => {
+  const BG = '#efe6d2', INK = '#2f2a1e', ACCENT = '#8a6a2f';
+  /* 行首禁则：中文标点（，。、；：！？）】》」』〉”’%）不得落在行首 ——
+     wrapCJK 是纯贪心断行、不管这个，所以把上一行末字拉下来陪标点（两行总字数不变）。 */
+  const NO_HEAD = '，。、；：！？）】》」』〉”’%';
+  const fixHead = ls => {
+    for (let i = 1; i < ls.length; i++)
+      if (NO_HEAD.includes(ls[i][0]) && ls[i - 1].length > 1) {
+        ls[i] = ls[i - 1].slice(-1) + ls[i]; ls[i - 1] = ls[i - 1].slice(0, -1);
+      }
+    return ls;
+  };
+
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 4;
+  ctx.strokeRect(16, 16, W - 32, H - 32);          // 外框内沿 y≈18 / y≈837
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+  const x0 = 56, maxW = W - 112;                   // 左边距与 textBoardTex 一致；正文最大行宽 1088px
+
+  /* —— 标题 + 副标 —— */
+  ctx.fillStyle = INK;
+  ctx.font = `bold 54px ${CJK}`;
+  ctx.fillText('古 色 之 用', x0, 84);
+  ctx.font = `24px ${CJK}`;
+  ctx.globalAlpha = 0.7; ctx.fillText('从《月曼清游图》十二开看设色之美', x0, 124); ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(90,75,45,0.35)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x0, 146); ctx.lineTo(W - x0, 146); ctx.stroke();
+
+  /* —— 正文五则：整段连续排，「序号＋小标题」金褐粗体，其余墨色常规体 —— */
+  const bodySize = 25, lh = 45, gap = 19;
+  const secs = [
+    { h: '一　随类赋彩　', b: '「六法」之一。中国画不摹物象的固有色，而依物之「类」定色：宫瓦用石青，远山用黛蓝，仕女内衬用月白。取的是概念之色，故历久而不失其雅。' },
+    { h: '二　石色与水色　', b: '矿物色（石青、石绿、赭石）厚重不透明，须先以淡墨或水色打底、再逐层薄罩；植物色（花青、藤黄）清透易渗，多用于罩染以调冷暖。本馆第一单元即按这两条工序线陈列。' },
+    { h: '三　墨分五色　', b: '张彦远《历代名画记》谓「运墨而五色具」：焦、浓、重、淡、清。墨本身即是一色，与彩色相济而不相碍。' },
+    { h: '四　色随月变　', b: '正月梅、二月柳、六月荷、九月菊、十二月雪：同一座宫苑，十二个月各有其色。此册逐月设色，本身就是一部按月编排的色谱。' },
+    { h: '五　雅称即审美　', b: '「月白」取月华之轻，「霁蓝」取雨霁初晴，「松花」取松树花粉，「藕合」取藕心之色。古人以自然物象名色：名之成，即美之成。' },
+  ];
+  let y = 194, lastBaseline = y;
+  secs.forEach((s, i) => {
+    /* 按粗体度量换行（最宽情形），正文用常规体画就一定不会溢出 */
+    ctx.font = `bold ${bodySize}px ${CJK}`;
+    const lines = fixHead(wrapCJK(ctx, s.h + s.b, maxW));
+    let idx = 0;                                    // 已排走的字数，用来定位每行里属于小标题的那几个字
+    lines.forEach(ln => {
+      const headEnd = Math.min(s.h.length, idx + ln.length);
+      const headPart = idx < headEnd ? s.h.slice(idx, headEnd) : '';
+      const bodyPart = ln.slice(headPart.length);
+      let x = x0;
+      if (headPart) { ctx.font = `bold ${bodySize}px ${CJK}`; ctx.fillStyle = ACCENT; ctx.fillText(headPart, x, y); x += ctx.measureText(headPart).width; }
+      if (bodyPart) { ctx.font = `${bodySize}px ${CJK}`; ctx.fillStyle = INK; ctx.fillText(bodyPart, x, y); }
+      idx += ln.length; lastBaseline = y; y += lh;
+    });
+    if (i < secs.length - 1) y += gap;
+  });
+
+  /* —— 落款：分隔线之下三行，小一档字号 —— */
+  const footSepY = lastBaseline + 30;
+  ctx.strokeStyle = 'rgba(90,75,45,0.35)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x0, footSepY); ctx.lineTo(W - x0, footSepY); ctx.stroke();
+  ctx.font = `24px ${CJK}`; ctx.fillStyle = INK; ctx.globalAlpha = 0.85;
+  let fy = footSepY + 30;
+  ['主展墙画心即此册十二开：上排正月—六月，下排七月—十二月，自左至右。',
+   '清 · 陈枚　绢本设色　乾隆三年（1738）',
+   '每开纵 37、横 31.8 厘米　故宫博物院藏'].forEach(t => { ctx.fillText(t, x0, fy); fy += 34; });
+  ctx.globalAlpha = 1;
+}), 2.4, 1.71, -6.2, 1.275, -20, Math.PI/2);
+const auxBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 2.5), WOOD_MAT);
+auxBase.position.set(-6.24, 0.21, -20); auxBase.castShadow = auxBase.receiveShadow = true;
+scene.add(auxBase);
+
+/* ================= 第一单元（色源・万物生）· 颜料加工展厅 =================
+   整厅按**加工流程**排布，一圈读完就是一道完整工序：
+     西墙 = 原料（北半 石色矿石 / 南半 草木干料，进门正对的焦点）
+     北墙 = 工艺（4 座工序台：粉碎 → 水飞 → 沉淀分级 → 晾干成粉，上方挂流程图）
+     南墙 = 成品（4 座地平矮展柜：东 2 柜石色、西 2 柜水色）
+   中部留空，走道 ≥ 3m。展柜与工序台都是 0.75~0.78m 台面，站着俯视即可，不用弯腰。 */
+buildRoom({ cx:-12.75, cz:21, w:12.5, d:9, wall:'#8d8a83', floor:'#c8c2b6', omit:['+x'] });
+plate(textBoardTex({ w:1024, h:220, bg:'#2a241b', fg:'#e8cf94', title:UNITS.u1.cn,
+  sub:UNITS.u1.en, titleSize:60, align:'center' }),
+  5.6, 1.2, -18.85, 3.4, 21, Math.PI/2);          /* 西墙标题带，正压在原料墙头顶 */
+
+/* —— 西墙：原料墙（两段） —— */
+buildSpecimenWall();
+
+/* —— 北墙：工序台 + 流程图（左端保留展词板） ——
+   台沿北墙排开，观众沿墙走一遍就看完整个加工过程。 */
+plate(textBoardTex({ w:1400, h:800, title:'色从哪里来', sub:'SOURCES · 矿物与草木',
+  body:ASSETS.u1.note, titleSize:56, bodySize:27, align:'left' }),
+  4.2, 2.4, -16.40, 1.75, 16.66, 0);
+plate(processTex(), 4.6, 2.4, -10.87, 2.30, 16.66, 0);   /* 流程图挂在工序台正上方做总览 */
+
+const BENCH_ROW = [
+  { x:-12.90, no:1, title:'粉碎', sub:'石臼捣碎，粗砂成粒', props:() => mortar() },
+  { x:-11.55, no:2, title:'水飞', sub:'水中研磨漂洗去土', props:() => washBasin() },
+  { x:-10.20, no:3, title:'沉淀分级', sub:'静置分层，头青二青三青',
+    props:() => settleJars(COLOR_BY_ID['shiqing'].hex) },
+  { x: -8.85, no:4, title:'晾干成粉', sub:'八色收贮，可调胶上绢', props:() => bambooTray() }
+];
+BENCH_ROW.forEach(b => {
+  const bn = processBench(b.no, b.title, b.sub, b.props());
+  bn.position.set(b.x, 0, 17.05);
+  /* 局部 +Z 朝观众：台面朝南（观众从南侧走道看过来） */
+  scene.add(bn);
+  /* 走道：4 个圆把观众挡在台沿外 0.35m，中部走道仍有 17.67…23.64 ≈ 6.0m */
+  blockers.push({ x: b.x, z: 17.05, r: 0.62 });
+});
+
+/* —— 南墙：4 座地平矮展柜（成品），一字排开、面朝北 ——
+   东→西 = 石色 2 柜（石青｜霁蓝、黛蓝｜苍黄）+ 水色 2 柜（松花｜杏黄、藕合｜月白）。
+   每柜 2 个标本位，每件标本都是「原料 → 碎料 → 色粉」三层。 */
+const CASE_ROW = [
+  { x: -9.90, title:'石色 · 石青 ｜ 霁蓝', sub:'矿物石色' },
+  { x:-11.75, title:'石色 · 黛蓝 ｜ 苍黄', sub:'矿物石色' },
+  { x:-13.60, title:'水色 · 松花 ｜ 杏黄', sub:'植物水色' },
+  { x:-15.45, title:'水色 · 藕合 ｜ 月白', sub:'植物水色' }
+];
+const CASE_MINS = [['shiqing', 'jilan'], ['dailan', 'canghuang'],
+                   ['songhua', 'xinghuang'], ['ouhe', 'yuebai']];
+CASE_ROW.forEach((row, k) => {
+  const cs = buildTableCase(row.title, row.sub,
+    MINERAL_BY_CID[CASE_MINS[k][0]], MINERAL_BY_CID[CASE_MINS[k][1]]);
+  cs.position.set(row.x, 0, 24.64);
+  cs.rotation.y = Math.PI;                 /* 局部 +Z → 世界 −Z：柜面朝北，正对观众 */
+  scene.add(cs);
+  /* 走道：每柜 3 个圆连成一道栏 —— 观众被挡在离玻璃 0.54m 处（太近就只能看见玻璃了） */
+  [0, -0.48, 0.48].forEach(dz => blockers.push({ x: row.x, z: 24.64 + dz, r: 1.0 }));
+});
+/* 原料墙前的走道：WALK 的西界 −18.4 挡不住贴墙，补一排小圆推到 0.6m 外 */
+for (let z = 17.8; z <= 24.2; z += 0.8) blockers.push({ x: -18.55, z, r: 0.6 });
+
+/* ================= 第四单元（感知・互动）================= */
+buildRoom({ cx:12.5, cz:-20, w:12, d:11, wall:'#8d8a83', floor:'#c8c2b6', omit:['-x'] });
+plate(textBoardTex({ w:1024, h:220, bg:'#2a241b', fg:'#e8cf94', title:UNITS.u4.cn,
+  sub:UNITS.u4.en, titleSize:60, align:'center' }),
+  5.6, 1.2, 18.35, 3.4, -20, -Math.PI/2);
+/* 色卡墙 */
+plate(canvasTex(1600, 620, (ctx, W, H) => {
+  ctx.fillStyle = '#efe6d2'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 4; ctx.strokeRect(14, 14, W-28, H-28);
+  ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'center';
+  ctx.font = `bold 50px ${CJK}`; ctx.fillText('色 卡 墙', W/2, 76);
+  const bw = 168, gap = 14, x0 = (W - (bw*8 + gap*7)) / 2;
+  COLORS.forEach((c, i) => {
+    const x = x0 + i * (bw + gap);
+    ctx.fillStyle = c.hex; ctx.fillRect(x, 104, bw, 300);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.strokeRect(x, 104, bw, 300);
+    ctx.fillStyle = '#3a3323'; ctx.font = `bold 36px ${CJK}`;
+    ctx.fillText(c.name, x + bw/2, 452);
+    ctx.fillStyle = '#7c735c'; ctx.font = '22px monospace';
+    ctx.fillText(c.hex, x + bw/2, 486);
+  });
+  ctx.fillStyle = '#8a7d63'; ctx.font = `26px ${CJK}`;
+  ctx.fillText('其余传统色卡待录入 —— 观众可在此对照辨认', W/2, 566);
+  ctx.strokeStyle = 'rgba(120,105,75,0.28)'; ctx.lineWidth = 2;
+  for (let r = 0; r < 2; r++) for (let i = 0; i < 16; i++) {
+    ctx.strokeRect(x0 + i*110, 516 + r*22, 100, 16);
+  }
+}), 9.6, 3.72, 12.5, 2.1, -25.36);
+/* 互动屏 */
+plate(canvasTex(1024, 630, (ctx, W, H) => {
+  ctx.fillStyle = '#0e1116'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#2b3a48'; ctx.lineWidth = 6; ctx.strokeRect(14, 14, W-28, H-28);
+  ctx.fillStyle = '#8fd6ff'; ctx.textAlign = 'center';
+  ctx.font = `bold 56px ${CJK}`; ctx.fillText('互 动 屏', W/2, 250);
+  ctx.fillStyle = '#9fb4c4'; ctx.font = `32px ${CJK}`;
+  let y = 330;
+  wrapCJK(ctx, ASSETS.u4.note, W - 160).forEach(ln => { ctx.fillText(ln, W/2, y); y += 50; });
+}), 2.6, 1.6, 10.6, 1.85, -14.64, Math.PI);
+/* 留言墙 */
+plate(canvasTex(1400, 700, (ctx, W, H) => {
+  ctx.fillStyle = '#e8dcc2'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 5; ctx.strokeRect(18, 18, W-36, H-36);
+  ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'center';
+  ctx.font = `bold 56px ${CJK}`; ctx.fillText('留 言 墙', W/2, 104);
+  ctx.font = `30px ${CJK}`; ctx.fillStyle = '#6d6148';
+  ctx.fillText('收尾结语 · 观众留言〔待置入〕', W/2, 168);
+  const notes = ['#f2e6b8','#e7d3c0','#d8e2c4','#e3d5e6','#f0dcc2','#d7e0e8'];
+  for (let i = 0; i < 12; i++) {
+    const cx = 150 + (i % 4) * 300, cy = 260 + Math.floor(i / 4) * 140;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(((i * 37) % 11 - 5) * Math.PI / 180);
+    ctx.fillStyle = notes[i % notes.length];
+    ctx.fillRect(-95, -55, 190, 110);
+    ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.lineWidth = 2; ctx.strokeRect(-95, -55, 190, 110);
+    ctx.restore();
+  }
+}), 3.4, 1.7, 15.4, 1.8, -14.64, Math.PI);
+
+/* ================= 室外：地面 / 甬道 / 灯柱 ================= */
+const ground = new THREE.Mesh(new THREE.CircleGeometry(74, 72),
+  new THREE.MeshStandardMaterial({ color:'#2b2721', roughness:0.98 }));
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.03; ground.receiveShadow = true;
+scene.add(ground);
+const path = new THREE.Mesh(new THREE.PlaneGeometry(11, 10.5),
+  new THREE.MeshStandardMaterial({ color:'#b8b0a0', roughness:0.9 }));
+path.rotation.x = -Math.PI/2; path.position.set(0, 0.01, 31.5); path.receiveShadow = true;
+scene.add(path);
+[-1, 1].forEach(s => {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.085, 2.6, 16),
+    new THREE.MeshStandardMaterial({ color:'#3d382e', roughness:0.8 }));
+  post.position.set(s * 4.3, 1.3, 31.5); post.castShadow = true; scene.add(post);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.17, 20, 16),
+    new THREE.MeshBasicMaterial({ color:'#ffe7bd' }));
+  bulb.position.set(s * 4.3, 2.72, 31.5); scene.add(bulb);
+  const pl = new THREE.PointLight('#ffdca8', 10, 12, 2);
+  pl.position.set(s * 4.3, 2.6, 31.5); scene.add(pl);
+});
+
+/* ---------- 主展墙画面：拿到真图后自动替换占位 ---------- */
+const paintImg = document.getElementById('paint-img');
+/* 序厅长墙是 4.36:1 的超宽画心，与主展墙的 2.32:1 不是同一比例 ——
+   同一张图贴上去必然被「铺满」算式二次裁切。所以长墙单独一张横排长卷；
+   取不到就退回主展墙那张（会裁切，但不会空墙）。 */
+const paintWallImg = new Image();
+let paintReady = false, wallReady = false;
+
+function drawPaintWall() {
+  const cv = paintCanvas, ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+  if (paintReady) {
+    const iw = paintImg.naturalWidth, ih = paintImg.naturalHeight;
+    const s = Math.max(W / iw, H / ih);
+    ctx.drawImage(paintImg, (W - iw*s)/2, (H - ih*s)/2, iw*s, ih*s);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#e7dcbd'); g.addColorStop(0.5, '#dccca6'); g.addColorStop(1, '#ceb98f');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(120,95,55,0.25)'; ctx.lineWidth = 6; ctx.strokeRect(14, 14, W-28, H-28);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#6d5c3c';
+    ctx.font = `bold 72px ${CJK}`; ctx.fillText('《月曼清游图》', W/2, H/2 - 40);
+    ctx.font = `34px ${CJK}`; ctx.fillText('清 · 陈枚　高清珂罗版', W/2, H/2 + 26);
+    ctx.font = '24px monospace'; ctx.fillStyle = 'rgba(109,92,60,0.75)';
+    ctx.fillText('待置入 assets/painting/painting.jpg', W/2, H/2 + 80);
+  }
+  paintTex.needsUpdate = true;
+}
+const proWallCanvas = document.createElement('canvas');
+proWallCanvas.width = 2048; proWallCanvas.height = 780;
+const proWallTex = new THREE.CanvasTexture(proWallCanvas);
+proWallTex.colorSpace = THREE.SRGBColorSpace; proWallTex.anisotropy = 4;
+plate(proWallTex, 11.4, 4.34, 6.36, 2.2, 20, -Math.PI/2);
+
+function drawProWall() {
+  const ctx = proWallCanvas.getContext('2d'), W = 2048, H = 780, artH = 470;
+  ctx.fillStyle = '#d8c9a6'; ctx.fillRect(0, 0, W, artH);
+  const wallSrc = wallReady ? paintWallImg : (paintReady ? paintImg : null);
+  if (wallSrc) {
+    const iw = wallSrc.naturalWidth, ih = wallSrc.naturalHeight;
+    const s = Math.max(W / iw, artH / ih);
+    ctx.drawImage(wallSrc, (W - iw*s)/2, (artH - ih*s)/2, iw*s, ih*s);
+  } else {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#6d5c3c'; ctx.font = `bold 74px ${CJK}`;
+    ctx.fillText('《月曼清游图》喷绘长墙', W/2, 224);
+    ctx.font = `30px ${CJK}`; ctx.fillStyle = 'rgba(109,92,60,0.85)';
+    ctx.fillText('清 · 陈枚　待置入高清图 assets/painting/painting.jpg', W/2, 288);
+  }
+  ctx.fillStyle = '#e8dcc2'; ctx.fillRect(0, artH, W, H - artH);
+  const bw = 244, gap = 6, x0 = (W - (bw*8 + gap*7)) / 2;
+  COLORS.forEach((c, i) => {
+    const x = x0 + i * (bw + gap);
+    ctx.fillStyle = c.hex; ctx.fillRect(x, artH + 16, bw, 214);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = c.light ? '#2b2417' : '#ffffff';
+    ctx.font = `bold 52px ${CJK}`; ctx.fillText(c.name, x + bw/2, artH + 158);
+    ctx.fillStyle = '#6d6148'; ctx.font = '20px monospace';
+    ctx.fillText(c.hex, x + bw/2, artH + 268);
+  });
+  proWallTex.needsUpdate = true;
+}
+function refreshWallArt() { drawPaintWall(); drawProWall(); }
+paintImg.addEventListener('load', () => { paintReady = true; refreshWallArt(); });
+paintImg.addEventListener('error', () => { paintReady = false; refreshWallArt(); });
+paintWallImg.addEventListener('load', () => { wallReady = true; drawProWall(); });
+/* ⚠️ 失败也要重画一次：此时 wallSrc 落到主展墙那张，长墙不会停在占位画面 */
+paintWallImg.addEventListener('error', () => { wallReady = false; drawProWall(); });
+refreshWallArt();
+paintImg.src = ASSETS.painting.img;
+paintWallImg.src = ASSETS.painting.wallImg;
+
+/* ---------- 顶部色点导航 ---------- */
+const dotsBox = document.getElementById('dots-museum');
 COLORS.forEach((c, i) => {
   const d = document.createElement('button');
   d.className = 'dot'; d.style.background = c.hex; d.title = c.name;
   d.addEventListener('click', () => teleport(i));
   dotsBox.appendChild(d);
 });
-const allDots = dotsBox.querySelectorAll('.dot');
+const museumDotEls = dotsBox.querySelectorAll('.dot');
 
 function teleport(i) {
   const e = exhibits[i];
   camera.position.set(Math.cos(e.a) * (STAND_R - 2.4), 1.7, Math.sin(e.a) * (STAND_R - 2.4));
-  camera.lookAt(e.x, 1.4, e.z);
+  camera.lookAt(e.x, e.spec.gazeY, e.z);      // 地平柜矮，视线跟着降
   showInfo(i);
-  allDots.forEach((d, k) => d.classList.toggle('on', k === i));
+  museumDotEls.forEach((d, k) => d.classList.toggle('on', k === i));
 }
 
-/* ============ 漫游（修复：直接用 moveForward/moveRight） ============ */
+/* ---------- 漫游 ---------- */
 const controls = new PointerLockControls(camera, document.body);
 const hint = document.getElementById('hint');
 const dir = { f:0, s:0 };
 let currentIdx = -1;
 
-// 必须挂在 document 上：指针锁定期间浏览器把鼠标事件派发给「被锁定的元素」
-// （这里 lock() 锁的是 document.body），挂在 canvas 上收不到漫游中的点击。
-document.addEventListener('click', (ev) => {
-  const t = ev.target;
-  // 卷轴覆盖层里的点击（含刚点过的「返回展厅」）不该顺带把指针锁回展厅；
-  // 顶部导航色点和信息面板按钮各自有自己的点击意图，也不抢
-  if (t.closest && t.closest('#scrollview, header, #info .more')) return;
-  if (!controls.isLocked) { controls.lock(); return; }
-  // 漫游中：正注视着某件展品（信息面板已弹出）时点击 = 展开它的卷轴详解
-  if (currentIdx >= 0) openScroll(currentIdx);
-});
-controls.addEventListener('lock', () => { hint.style.opacity = 0; });
-controls.addEventListener('unlock', () => { hint.style.opacity = 1; });
+const PAINT_IDX = -2;              // showInfo / proximity 用 -2 代表「画作」
 
+controls.addEventListener('lock', () => { hint.style.opacity = 0; setHover(null); setAim(''); });
+controls.addEventListener('unlock', () => { hint.style.opacity = 1; setAim(''); });
+
+/* 只留 WASD。退出漫游改为**左键点空地**（见下面的 mousedown），
+   不再让人「先按 ESC 解锁、再回头点展品」。 */
 document.addEventListener('keydown', (e) => {
+  if (currentView !== 'museum') return;
   if (e.code === 'KeyW') dir.f = 1; if (e.code === 'KeyS') dir.f = -1;
   if (e.code === 'KeyA') dir.s = -1; if (e.code === 'KeyD') dir.s = 1;
 });
@@ -711,20 +3353,34 @@ document.addEventListener('keyup', (e) => {
 
 const info = document.getElementById('info');
 function showInfo(i) {
+  if (i === PAINT_IDX) {
+    info.innerHTML = `
+      <div class="sw"><span class="chip" style="background:#a8853f"></span>
+        <span><span class="nm serif">${ASSETS.painting.title}</span><br>
+        <span class="hex mono">${ASSETS.painting.author}</span></span></div>
+      <div class="obj">第二单元 · 绘事・绢上观</div>
+      <div class="poem serif">珂罗版高清古画，画前 8 块低斜小展牌，一色一牌。<br>
+        <span class="au">也可直接点击画面上前观看</span></div>
+      <button class="open-scroll">观画 · 放大细看</button>`;
+    info.classList.add('show');
+    info.querySelector('.open-scroll').addEventListener('click', (ev) => {
+      ev.stopPropagation(); openPainting();
+    });
+    return;
+  }
   const c = COLORS[i];
   info.innerHTML = `
     <div class="sw"><span class="chip" style="background:${c.hex}"></span>
       <span><span class="nm serif">${c.name}</span><br><span class="hex mono">${c.hex}</span></span></div>
     <div class="obj">${c.obj} · ${c.muse}</div>
     <div class="poem serif">${c.poem}<br><span class="au">${c.poet}</span></div>
-    <button class="more" type="button" data-i="${i}">展开卷轴 · 查看详解 →</button>`;
+    <button class="open-scroll" data-idx="${i}">展卷 · 查看颜色</button>`;
   info.classList.add('show');
+  info.querySelector('.open-scroll').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    openScroll(i);
+  });
 }
-// 面板每次 showInfo 都会重建，所以用事件委托，别逐次绑定
-info.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.more');
-  if (b) openScroll(Number(b.dataset.i));
-});
 function proximity() {
   let best = -1, bd = 3.6;
   exhibits.forEach((e, i) => {
@@ -732,22 +3388,161 @@ function proximity() {
     const d = Math.sqrt(dx*dx + dz*dz);
     if (d < bd) { bd = d; best = i; }
   });
+  if (best < 0) {                  // 展台优先；都不在范围内才看画作
+    const dx = camera.position.x - PAINT_POS.x, dz = camera.position.z - PAINT_POS.z;
+    if (dx*dx + dz*dz < PAINT_POS.r * PAINT_POS.r) best = PAINT_IDX;
+  }
   if (best !== currentIdx) {
     currentIdx = best;
-    if (best >= 0) { showInfo(best); allDots.forEach((d, k) => d.classList.toggle('on', k === best)); }
-    else info.classList.remove('show');
+    if (best === PAINT_IDX) {
+      showInfo(best);
+      museumDotEls.forEach(d => d.classList.remove('on'));
+    } else if (best >= 0) {
+      showInfo(best);
+      museumDotEls.forEach((d, k) => d.classList.toggle('on', k === best));
+    } else {
+      info.classList.remove('show');
+    }
   }
 }
 
-/* ============ 卷轴详解覆盖层 ============ */
-const svEl     = document.getElementById('scrollview');
-const svScroll = document.getElementById('svScroll');
-const svDots   = document.getElementById('svDots');
-const svFill   = document.getElementById('svFill');
-const SV_TOTAL = COLORS.length + 2;   // 引首 + 8 色卷 + 卷末
-let svCur = 0;
+/* ---------- 自由视角点击拾取 ---------- */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let hoverKey = '';
+let lockedClickAt = 0;      // 漫游中处理过一次左键的时间戳，用来拦住随后那次 canvas click
 
-function svIntro() {
+function pickAt(clientX, clientY) {
+  pointer.set((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(hitboxes, false)[0];
+  return hit ? hit.object.userData : null;
+}
+
+function setHover(hd) {
+  const key = hd ? hd.kind + ':' + (hd.idx !== undefined ? hd.idx : (hd.id || '')) : '';
+  if (key === hoverKey) return;
+  hoverKey = key;
+  canvas.style.cursor = hd ? 'pointer' : 'default';
+  const si = (hd && hd.kind === 'stand') ? hd.idx : -1;
+  exhibits.forEach((e, k) => { e.pickRing.visible = (k === si); });
+}
+
+/* ---------- 「左键点下去会怎样」的提示 ----------
+   漫游（指针锁定）时钉在屏幕中心当准星，靠近展品就提示展卷；自由视角下贴着光标走。
+   两种状态都能一眼看出下一步点哪，不用再记「要先按 ESC」。 */
+const aimEl = document.getElementById('aim');
+const aimTipEl = document.getElementById('aim-tip');
+const AIM_STAND = '点击鼠标左键 · 进入卷轴';
+const AIM_PAINT = '点击鼠标左键 · 放大观画';
+const AIM_BLANK = '点击空地 · 退出漫游';
+let aimKey = '';
+
+function setAim(text, x, y) {
+  const locked = controls.isLocked;
+  const key = text ? (locked ? '锁|' : '游|') + text : '';
+  if (key !== aimKey) {
+    aimKey = key;
+    aimEl.classList.toggle('free', !!text && !locked);
+    aimEl.classList.toggle('dim', text === AIM_BLANK);
+    if (text) aimTipEl.textContent = text;
+    aimEl.classList.toggle('on', !!text);
+  }
+  if (!aimKey) return;
+  if (locked) { aimEl.style.left = ''; aimEl.style.top = ''; }   // 居中当准星
+  else { aimEl.style.left = x + 'px'; aimEl.style.top = y + 'px'; }   // 追着光标
+}
+
+/* 同一个提示，锁定时说「点击鼠标左键 · X」，自由视角下说「点击X」 */
+function aimTextFor(hd, locked) {
+  if (!hd) return locked ? AIM_BLANK : '';
+  return (locked ? '点击鼠标左键 · ' : '点击') + (hd.kind === 'stand' ? '进入卷轴' : '放大观画');
+}
+
+canvas.addEventListener('pointermove', (e) => {
+  /* 指针锁定时 clientX/clientY 会冻结，射线无意义 —— 先行短路 */
+  if (controls.isLocked) { setHover(null); return; }
+  const hd = pickAt(e.clientX, e.clientY);
+  setHover(hd);
+  setAim(aimTextFor(hd, false), e.clientX, e.clientY);
+});
+canvas.addEventListener('pointerleave', () => {
+  if (controls.isLocked) return;
+  setHover(null);
+  setAim('');
+});
+
+/* 「点展品 = 看文物/看画，点空地 = 进漫游」 */
+canvas.addEventListener('click', (e) => {
+  /* 这一次点击若刚被下面那条 mousedown 处理过（退锁是异步的，click 到达时
+     isLocked 可能还是 true），就不要再当成「点空地进漫游」而立刻重新锁定 */
+  if (e.timeStamp - lockedClickAt < 400) return;
+  if (currentView !== 'museum' || controls.isLocked) return;
+  const hd = pickAt(e.clientX, e.clientY);
+  setHover(null);
+  setAim('');
+  if (hd && hd.kind === 'stand') { openScroll(hd.idx); return; }
+  if (hd && hd.kind === 'paint') { openPainting(); return; }
+  if (hd && hd.kind === 'plate') { openPainting(hd.id); return; }
+  controls.lock();
+});
+
+/* 漫游中的左键。用 mousedown：指针锁定时鼠标事件都派发给 body，canvas 收不到。
+     靠近展品 → 直接展卷 / 观画（左键即进，不必先按 ESC 解锁）
+     否则     → 退出漫游，把光标还给参观者 */
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (currentView !== 'museum' || !controls.isLocked) return;
+  lockedClickAt = e.timeStamp;
+  if (currentIdx === PAINT_IDX) { openPainting(); return; }
+  if (currentIdx >= 0) { openScroll(currentIdx); return; }
+  controls.unlock();
+});
+
+/* ---------- 3D 主循环 ---------- */
+const clock = new THREE.Clock();
+function animate() {
+  /* 注意：不要在里面再调 requestAnimationFrame，
+     setAnimationLoop 自己会调度；两者并存会出现两条 rAF 链 → 双倍渲染和移速 */
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  if (controls.isLocked) {
+    const speed = 5.0;
+    const p = controls.getObject().position;
+    const ox = p.x, oz = p.z;
+    controls.moveForward(dir.f * speed * dt);
+    controls.moveRight(dir.s * speed * dt);
+
+    /* 圆形障碍推开（展台 / 展柜 / 家具） */
+    for (const b of blockers) {
+      const dx = p.x - b.x, dz = p.z - b.z;
+      const d = Math.sqrt(dx*dx + dz*dz);
+      if (d < b.r && d > 0.0001) { p.x = b.x + dx/d*b.r; p.z = b.z + dz/d*b.r; }
+    }
+    /* 可行走区域（展厅并集）；越界则沿墙滑动，必要时原地停住 */
+    if (!walkable(p.x, p.z)) {
+      if (walkable(p.x, oz)) p.z = oz;
+      else if (walkable(ox, p.z)) p.x = ox;
+      else { p.x = ox; p.z = oz; }
+    }
+    p.y = 1.7;
+    proximity();
+    /* 漫游中每帧更新准星提示：对着展台/画作就提示左键展卷/观画 */
+    setAim(currentIdx === PAINT_IDX ? AIM_PAINT
+         : currentIdx >= 0       ? AIM_STAND
+         :                         AIM_BLANK);
+  }
+
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   2. 视图 B · 色谱长卷
+   ============================================================ */
+const scrollTrack = document.getElementById('scroll');
+const scrollDotsBox = document.getElementById('dots-scroll');
+
+function intro() {
   const s = document.createElement('section');
   s.className = 'seg intro';
   const strip = COLORS.map(c => `<i style="background:${c.hex}"></i>`).join('');
@@ -758,7 +3553,7 @@ function svIntro() {
     <div class="hint mono">← 横向滑动 / 拖动展开 →</div>`;
   return s;
 }
-function svOutro() {
+function outro() {
   const s = document.createElement('section');
   s.className = 'seg outro';
   s.innerHTML = `
@@ -771,7 +3566,7 @@ function svOutro() {
     </div>`;
   return s;
 }
-function svColorSeg(c) {
+function colorSeg(c, i) {
   const on = c.light ? '#2b2417' : '#ffffff';
   const s = document.createElement('section');
   s.className = 'seg color';
@@ -807,97 +3602,246 @@ function svColorSeg(c) {
   return s;
 }
 
-svScroll.appendChild(svIntro());
-COLORS.forEach(c => svScroll.appendChild(svColorSeg(c)));
-svScroll.appendChild(svOutro());
+scrollTrack.appendChild(intro());
+COLORS.forEach((c, i) => scrollTrack.appendChild(colorSeg(c, i)));
+scrollTrack.appendChild(outro());
 
 COLORS.forEach((c, i) => {
   const d = document.createElement('button');
-  d.className = 'sv-dot'; d.type = 'button';
-  d.style.background = c.hex; d.title = c.name;
-  d.addEventListener('click', () => svGo(i + 1, true));
-  svDots.appendChild(d);
+  d.className = 'dot'; d.style.background = c.hex; d.title = c.name;
+  d.addEventListener('click', () => go(i + 1));
+  scrollDotsBox.appendChild(d);
 });
-const svDotEls = svDots.querySelectorAll('.sv-dot');
-document.getElementById('svPrev').addEventListener('click', () => svGo(svCur - 1, true));
-document.getElementById('svNext').addEventListener('click', () => svGo(svCur + 1, true));
-document.getElementById('back3d').addEventListener('click', closeScroll);
+const scrollDotEls = scrollDotsBox.querySelectorAll('.dot');
 
-// smooth=false 时必须临时关掉 CSS 的 scroll-behavior，否则 scrollLeft 会被当成平滑滚动，
-// 打开卷轴时会从引首一路滑到目标色段。
-function svGo(idx, smooth) {
-  idx = Math.max(0, Math.min(SV_TOTAL - 1, idx));
-  svCur = idx;
-  const left = idx * svScroll.clientWidth;
-  if (smooth) { svScroll.scrollTo({ left, behavior: 'smooth' }); return; }
-  const prev = svScroll.style.scrollBehavior;
-  svScroll.style.scrollBehavior = 'auto';
-  svScroll.scrollLeft = left;
-  svScroll.style.scrollBehavior = prev;
-  svSync(idx);
+/* 卷轴结构：引首(0) + 8 色段(1..8) + 拖尾(9)，故色段 i 的下标是 i+1 */
+const total = COLORS.length + 2;
+let cur = 0;
+
+/* ⚠️ .scroll 上有 scroll-behavior:smooth，直接赋值 scrollLeft 会被它接管而变成动画。
+   这里临时改成 auto，保证「瞬时定位」，否则会和 scroll-snap 打架。 */
+function setScrollLeft(v) {
+  const prev = scrollTrack.style.scrollBehavior;
+  scrollTrack.style.scrollBehavior = 'auto';
+  scrollTrack.scrollLeft = v;
+  scrollTrack.style.scrollBehavior = prev;
 }
-function svSync(i) {
-  svCur = i;
-  svDotEls.forEach((d, k) => d.classList.toggle('on', k === i - 1));
-  svFill.style.width = ((i / (SV_TOTAL - 1)) * 100) + '%';
+
+function go(idx) {
+  idx = Math.max(0, Math.min(total - 1, idx));
+  cur = idx;
+  setScrollLeft(idx * scrollTrack.clientWidth);
 }
-svScroll.addEventListener('scroll', () => {
-  const w = svScroll.clientWidth;
+
+document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+document.getElementById('next').addEventListener('click', () => go(cur + 1));
+
+scrollTrack.addEventListener('scroll', () => {
+  const w = scrollTrack.clientWidth;
   if (!w) return;
-  svSync(Math.round(svScroll.scrollLeft / w));
+  const i = Math.round(scrollTrack.scrollLeft / w);
+  cur = i;
+  scrollDotEls.forEach((d, k) => d.classList.toggle('on', k === i - 1));
+  document.getElementById('pfill').style.width = ((i / (total - 1)) * 100) + '%';
 });
-
-function openScroll(i) {
-  if (controls.isLocked) controls.unlock();
-  info.classList.remove('show');
-  currentIdx = -1;
-  svEl.classList.add('on');
-  // 重放「从中间向两侧铺开」的动效：先摘掉 class 强制重排，再加回去
-  svEl.classList.remove('unrolling');
-  void svEl.offsetWidth;
-  svEl.classList.add('unrolling');
-  // 等覆盖层拿到布局宽度后再定位（否则 clientWidth 还是 0，会停在引首）
-  requestAnimationFrame(() => svGo(i + 1, false));
-}
-function closeScroll() {
-  svEl.classList.remove('on', 'unrolling');
-}
 
 document.addEventListener('keydown', (e) => {
-  if (!svEl.classList.contains('on')) return;
-  if (e.key === 'ArrowRight') svGo(svCur + 1, true);
-  else if (e.key === 'ArrowLeft') svGo(svCur - 1, true);
-  else if (e.key === 'Escape') closeScroll();
+  if (currentView !== 'scroll') return;
+  if (e.key === 'ArrowRight') go(cur + 1);
+  if (e.key === 'ArrowLeft') go(cur - 1);
 });
 
-/* ============ 主循环 ============ */
-const clock = new THREE.Clock();
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.1);
+document.getElementById('back-btn').addEventListener('click', () => backToMuseum());
 
-  if (controls.isLocked) {
-    const speed = 5.0;
-    controls.moveForward(dir.f * speed * dt);
-    controls.moveRight(dir.s * speed * dt);
-    const p = controls.getObject().position;
-    // 限制在展厅内（墙半径内）
-    const r = Math.sqrt(p.x*p.x + p.z*p.z);
-    if (r > MUSE_R - 1.2) { p.x *= (MUSE_R - 1.2)/r; p.z *= (MUSE_R - 1.2)/r; }
-    // 碰撞：展台 + 中央台
-    const blockers = [...exhibits.map(e => ({x:e.x, z:e.z, r:1.6})), {x:0, z:0, r:1.8}];
-    blockers.forEach(b => {
-      const dx = p.x - b.x, dz = p.z - b.z;
-      const d = Math.sqrt(dx*dx + dz*dz);
-      if (d < b.r && d > 0.0001) { p.x = b.x + dx/d*b.r; p.z = b.z + dz/d*b.r; }
-    });
-    proximity();
+/* ============================================================
+   3. 视图切换
+   ============================================================ */
+let revealPlayed = false;
+
+function openScroll(i) {
+  if (currentView === 'scroll') { go(i + 1); return; }
+  currentView = 'scroll';
+
+  /* 首次进入播完整的揭幕+铺开动效；之后进入只做短淡入。
+     .settled 必须"先加、后取消 hidden"，否则会闪一帧重播的动画。 */
+  if (revealPlayed) {
+    scrollViewEl.classList.add('settled');
+    scrollViewEl.classList.remove('fade');
+    void scrollViewEl.offsetWidth;
+    scrollViewEl.classList.add('fade');
+  } else {
+    scrollViewEl.classList.remove('settled');
   }
+  revealPlayed = true;
 
-  // 卷轴覆盖层整个盖住展厅时不必重绘（外面还有 4 个 11–17MB 的 GLB）
-  if (!svEl.classList.contains('on')) renderer.render(scene, camera);
+  if (controls.isLocked) controls.unlock();
+  setHover(null);
+  museumEl.classList.add('hidden');
+  paintViewEl.classList.add('hidden');
+  scrollViewEl.classList.remove('hidden');
+
+  /* ⚠️ 必须在取消 hidden 之后再定位：容器 display:none 时 clientWidth 为 0，
+     scrollLeft 会静默失败，卷轴将停在引首段。 */
+  go(i + 1);
+
+  renderer.setAnimationLoop(null);   // 隐藏期间停掉 3D 渲染
 }
-animate();
+
+function backToMuseum() {
+  currentView = 'museum';
+  scrollViewEl.classList.add('hidden');
+  paintViewEl.classList.add('hidden');
+  museumEl.classList.remove('hidden');
+  clock.getDelta();                  // 丢弃暂停期间累积的时间
+  renderer.setAnimationLoop(animate);
+}
+
+/* ============================================================
+   4. 视图 C · 观画（第二单元 · 全屏放大）
+   ============================================================ */
+const paintViewEl   = document.getElementById('view-painting');
+const paintImgEl    = paintImg;
+const paintPhEl     = document.getElementById('paint-ph');
+const spotsBox      = document.getElementById('paint-spots');
+const chipsBox      = document.getElementById('paint-chips');
+const blurbEl       = document.getElementById('paint-blurb');
+const guideEl       = document.getElementById('paint-guide');
+let selColor = null;
+
+document.getElementById('paint-bar-title').textContent = UNITS.u2.cn;
+document.getElementById('paint-title').innerHTML =
+  `《${ASSETS.painting.title}》<span class="au">${ASSETS.painting.author}</span>`;
+document.getElementById('paint-ph-title').textContent = `《${ASSETS.painting.title}》`;
+document.getElementById('paint-ph-sub').textContent   = ASSETS.painting.author;
+document.getElementById('paint-ph-path').textContent  = ASSETS.painting.img;
+document.getElementById('paint-back').addEventListener('click', () => closePainting());
+
+function renderGuide() {
+  const g = (ASSETS.painting.guide || '').trim();
+  guideEl.classList.toggle('empty', !g);
+  guideEl.textContent = g || '引导词待置入 —— 写进 index.html 里 ASSETS.painting.guide 即可，支持分段落。';
+}
+
+/* 色名按钮 */
+PLATES.forEach(p => {
+  const c = COLOR_BY_ID[p.id];
+  const b = document.createElement('button');
+  b.className = 'pchip'; b.dataset.id = p.id;
+  b.innerHTML = `<i style="background:${c.hex}"></i>${c.name}`;
+  b.addEventListener('click', () => selectPaintChip(p.id));
+  chipsBox.appendChild(b);
+});
+/* 画面热点（坐标是画面的百分比，未配置的色不出现） */
+PLATES.forEach(p => {
+  const pos = ASSETS.painting.spots && ASSETS.painting.spots[p.id];
+  if (!pos) return;
+  const d = document.createElement('span');
+  d.className = 'pspot'; d.dataset.id = p.id;
+  d.style.left = pos[0] + '%'; d.style.top = pos[1] + '%';
+  d.title = COLOR_BY_ID[p.id].name;
+  d.addEventListener('click', () => selectPaintChip(p.id));
+  spotsBox.appendChild(d);
+});
+
+function selectPaintChip(id) {
+  selColor = id || null;
+  chipsBox.querySelectorAll('.pchip').forEach(b =>
+    b.classList.toggle('on', b.dataset.id === selColor));
+  spotsBox.querySelectorAll('.pspot').forEach(s =>
+    s.classList.toggle('on', s.dataset.id === selColor));
+  const p = PLATES.find(x => x.id === selColor);
+  if (p) {
+    const c = COLOR_BY_ID[p.id];
+    blurbEl.innerHTML = `<b>${c.name}　${c.hex}</b><br>${p.txt}<br>`
+      + `<span class="where">画中位置：${p.pos}</span>`;
+  } else {
+    blurbEl.textContent = '点击色名，查看该色在画中的位置与释义。';
+  }
+}
+
+function syncPaintFrame() {
+  paintImgEl.style.display = paintReady ? 'block' : 'none';
+  paintPhEl.style.display  = paintReady ? 'none'  : 'flex';
+  spotsBox.style.display   = paintReady ? 'block' : 'none';
+}
+
+function openPainting(colorId) {
+  if (currentView === 'painting') { selectPaintChip(colorId); return; }
+  currentView = 'painting';
+  if (controls.isLocked) controls.unlock();
+  setHover(null);
+  info.classList.remove('show');
+  museumEl.classList.add('hidden');
+  scrollViewEl.classList.add('hidden');
+  paintViewEl.classList.remove('hidden');
+  syncPaintFrame();
+  selectPaintChip(colorId || null);
+  renderer.setAnimationLoop(null);
+}
+
+function closePainting() {
+  if (currentView !== 'painting') return;
+  currentView = 'museum';
+  paintViewEl.classList.add('hidden');
+  museumEl.classList.remove('hidden');
+  clock.getDelta();
+  renderer.setAnimationLoop(animate);
+}
+
+paintImg.addEventListener('load',  () => { if (currentView === 'painting') syncPaintFrame(); });
+paintImg.addEventListener('error', () => { if (currentView === 'painting') syncPaintFrame(); });
+renderGuide();
+syncPaintFrame();
+
+/* ============================================================
+   5. 配乐（文件缺失时按钮自动置灰，不影响其它功能）
+   ============================================================ */
+const paEl   = document.getElementById('paint-audio');
+const paNote = document.getElementById('paint-audio-note');
+paEl.src = ASSETS.painting.audio;
+paEl.addEventListener('error', () => {
+  paEl.style.display = 'none';
+  paNote.style.display = 'block';
+});
+
+const bgmEl  = document.getElementById('bgm');
+const bgmBtn = document.getElementById('bgm-btn');
+let bgmReady = false, bgmOn = false;
+
+function setBgm(on) {
+  bgmOn = on;
+  bgmBtn.classList.toggle('on', on);
+  if (on) bgmEl.play().catch(() => {}); else bgmEl.pause();
+}
+bgmEl.src = ASSETS.bgm;
+bgmBtn.classList.add('off');
+bgmEl.addEventListener('canplaythrough', () => {
+  bgmReady = true;
+  bgmBtn.classList.remove('off');
+  bgmBtn.title = '馆内环境配乐';
+});
+bgmEl.addEventListener('error', () => {
+  bgmReady = false; bgmOn = false;
+  bgmBtn.classList.remove('on');
+  bgmBtn.classList.add('off');
+  bgmBtn.title = '配乐待置入：' + ASSETS.bgm;
+});
+bgmBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!bgmReady) return;
+  setBgm(!bgmOn);
+});
+/* 浏览器要求用户手势后才能播放：首次点击时若配乐就绪就自动起播 */
+let bgmAuto = false;
+addEventListener('pointerdown', (e) => {
+  if (bgmAuto || !bgmReady || bgmOn) return;
+  if (e.target && e.target.closest && e.target.closest('#bgm-btn')) return;
+  bgmAuto = true;
+  setBgm(true);
+});
+
+/* ---------- 启动 ---------- */
+renderer.setAnimationLoop(animate);
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
