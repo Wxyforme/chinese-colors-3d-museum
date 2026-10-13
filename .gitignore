@@ -1,1 +1,5 @@
 .workbuddy/
+
+# Python 字节码（跑 tools/*.py 时会自动生成，别提交）
+__pycache__/
+*.pyc

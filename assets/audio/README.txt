@@ -1,22 +1,31 @@
 本目录放配乐。路径写在 index.html 的 ASSETS.bgm / ASSETS.painting.audio。
 
   bgm.mp3  —— 馆内环境配乐，也是观画视图的配乐（一首共用）。已置入。
-              馆内那处 <audio loop>：顶栏 ♪ 按钮解禁，入馆后第一次点击画面自动起播、循环。
-              观画那处 <audio controls>：出现播放器，不自动循环。
+              1.03 MB / 90 秒 / 96 kbps 立体声。
+
+⚠️ 两个 <audio> 都是 preload="none"，**页面加载时不会去取这个文件**：
+   馆内那首在「观众第一次点击画面」时才开始下载（备好即起播、循环）；
+   观画那首在「打开观画视图」时才下载。
+   这是故意的 —— 线上带宽被限速（实测单流 20~60 KB/s），配乐若跟 8 个模型抢管子，
+   会让加载遮罩晚解除好几分钟（实测同带宽下 478 秒 → 800 秒）。改回 preload="auto"
+   就把这个优化抵消掉了，别改。
 
 换成别的曲子：把新文件按同样的文件名放进本目录即可，不用改代码。
-
-  换一首不同的观画配乐：把 ASSETS.painting.audio 改成一个新文件名，
-  再把该文件也放进本目录。
+  换一首不同的观画配乐：把 ASSETS.painting.audio 改成一个新文件名，再把该文件也放进本目录。
 
 —— 当前这首 ——
-《高山流水》，古琴曲。源文件 8.0 MB / 210 秒 / CBR 320 kbps 立体声；
-本目录里的 bgm.mp3 是**截取开头 90 秒**，3.4 MB。
-截取用 `python -I tools/trim_mp3.py <输入> <输出> <起点秒> <时长秒>`（帧对齐截断，不重编码、零音质损失）。
-该脚本还会**顺手修好截断后第一帧里那个 Info/Xing 头帧**——它写着原曲的总帧数，不改的话
-播放器会把 90 秒的曲子当成 3 分 30 秒（进度条走不到头）。
-母带（未截取的 8.0 MB 原文件）放在 ../../.workbuddy/_src/audio/ —— 那里是 gitignore 的，
-不会被打包发布，也不会拖慢 GitHub Pages。
+《高山流水》，古琴曲。母带 8.0 MB / 210 秒 / 320 kbps 立体声，
+放在 ../../.workbuddy/_src/audio/（gitignore，不发布、不拖慢 GitHub Pages）。
 
-⚠️ 想再小只能重编码降码率（本机没有 ffmpeg，得先装编码器）——
-   320kbps 立体声 ≈ 2.29 MB/分钟，是本目录体积的主要来源。
+本目录的 bgm.mp3 = 从母带**取前 90 秒、重编码成 96 kbps**：
+
+    ffmpeg -i "../../.workbuddy/_src/audio/高山流水.mp3" -t 90 -map_metadata 0 \
+           -c:a libmp3lame -b:a 96k -ac 2 -ar 44100 bgm.mp3
+
+本机没有系统级 ffmpeg，用的是 imageio-ffmpeg 自带的那个
+（`python -m pip install imageio-ffmpeg`，二进制在 Lib/site-packages/imageio_ffmpeg/binaries/）。
+
+为什么不用「不重编码」的截断法：`tools/trim_mp3.py` 是零损失截断，但它保留原码率 ——
+320 kbps 需要持续 40 KB/s 才播得动，而这条线路单流常只有 20~60 KB/s，会断续。
+96 kbps 只要 12 KB/s，留足余量，体积也从 3.4 MB 降到 1.0 MB。
+（trim_mp3.py 仍然有用：想保持原码率、只截短的时候用它。）

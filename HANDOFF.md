@@ -1,7 +1,11 @@
 # 传统古色 · 3D 博物馆 —— 项目工作流文档（Handoff）
 
 > 本文档是项目的「接手说明书」，供后续 AI / 开发者快速理解全貌并继续工作。
-> 最后更新：2026-10-13（第 29 轮：加配乐《高山流水》90 秒 + 新增 `tools/trim_mp3.py`）；
+> 最后更新：2026-10-13（第 30 轮：**推送上线** + 配乐降到 96 kbps、两个 `<audio>` 改按需下载）；
+> 第 30 轮：**项目首次推到 GitHub Pages**（`Wxyforme/chinese-colors-3d-museum`，17.4 MB，含 4 件袍类真模型
+> 与配乐）。顺带量到线上首访的真实代价并做了两件事：配乐 320 kbps→**96 kbps**（3.4MB→1.03MB），
+> 两个 `<audio>` 由 `preload` 改成**按需下载**（实测同带宽下配乐让加载遮罩 478 秒→800 秒）。
+> 模型（7.9MB，真正在关键路径上）**按用户决定先不动**。详见 §7.9 与 §11 第 30 条。
 > 第 29 轮：配乐就位 —— 用户给的《高山流水》（8MB/210s）截成 90 秒 / 3.4MB，
 > 馆内与观画**共用这一首**；新增 `tools/trim_mp3.py`（帧对齐截断，不重编码），
 > 并修掉「截断后播放器把 90 秒读成 3 分半」的 **MP3 头帧坑** —— 详见 §7.9 与 §11 第 29 条。
@@ -110,7 +114,7 @@ museum-3d/                        ← 工作主目录（工作区 C:\Users\WANGS
 | 放哪 | 文件名 | 效果 |
 |------|--------|------|
 | `assets/painting/` | `painting.jpg` + `painting-wall.jpg` | **已置入**（第 24 轮，见该目录 README.txt）|
-| `assets/audio/` | `bgm.mp3` | **已置入**（第 29 轮）—— 顶栏 ♪ 按钮解禁，第一次点击画面后自动起播、循环 |
+| `assets/audio/` | `bgm.mp3` | **已置入**（第 29 轮）—— 第一次点击画面才开始下载并循环播放，顶栏 ♪ 届时解禁（第 30 轮改为按需下载，见 §7.9） |
 | ~~`assets/audio/`~~ | ~~`painting.mp3`~~ | **不放了** —— 观画改为与馆内**共用 `bgm.mp3`**，见 §7.9 |
 | `index.html` 的 `ASSETS.painting.guide` | 文本 | 观画视图右侧的引导词（支持 `\n` 分段） |
 | `index.html` 的 `ASSETS.painting.spots` | `{色id: [x%, y%]}` | 画面上出现可点的色标热点 |
@@ -728,24 +732,34 @@ pmrem.dispose();
 
 | 用在哪 | 取哪个字段 | 元素 | 行为 |
 |--------|-----------|------|------|
-| 馆内环境 | `ASSETS.bgm` | `<audio id="bgm" loop preload="auto">` | 顶栏 ♪ 解禁；**入馆后第一次点击画面**自动起播，循环 |
-| 观画视图 | `ASSETS.painting.audio` | `<audio id="paint-audio" controls preload="metadata">` | 右侧出现播放器，**不自动循环** |
+| 馆内环境 | `ASSETS.bgm` | `<audio id="bgm" loop preload="none">` | **第一次点击画面**才开始下载；备好即起播、循环；顶栏 ♪ 届时解禁 |
+| 观画视图 | `ASSETS.painting.audio` | `<audio id="paint-audio" controls preload="none">` | **打开观画视图**才下载；右侧出现播放器，**不自动循环** |
 
 两处现在都指向 `assets/audio/bgm.mp3`。**想拆成两首不同的曲子**：把 `ASSETS.painting.audio`
 改成一个新文件名，再把该文件放进 `assets/audio/`（不必动任何逻辑代码）。
 
+- ⚠️ **两个 `<audio>` 都是 `preload="none"`，这是刻意的 —— 别改回 `auto`/`metadata`。**
+  线上带宽被限速（本机实测单流 20~62 KB/s），配乐若在页面加载时就开始下载，会跟 8 个模型抢管子：
+  把本地限速到 17 KB/s 做对照实验，**屏蔽配乐 → 加载遮罩 478 秒解除；带配乐 → 800 秒**
+  （+5.4 分钟，+67%），而配乐只占总字节的 28% —— 说明媒体请求抢带宽比按字节算的更凶。
+  按需下载由 `armBgm()`（首次 `pointerdown` 或点 ♪）与 `armPaintAudio()`（`openPainting()` 里调用）触发。
 - 文件缺失时的降级路径**必须保留**：`#bgm` 的 `error` 监听会把 ♪ 按钮 `classList.add('off')` 置灰、
   并把 `title` 改成「配乐待置入：<路径>」；`#paint-audio` 的 `error` 监听会隐藏播放器、露出
   `#paint-audio-note`。**不报错、不白屏**（与其它素材同口径）。
-- `bgm.mp3` = 3.4 MB / 90 秒，由 8.0 MB / 210 秒的原曲截得。
-  截取工具 `python -I tools/trim_mp3.py <输入> <输出> <起点秒> <时长秒>`：
-  **帧对齐截断，不重编码、零音质损失、不依赖 ffmpeg**（本机没有 ffmpeg）。
-- ⚠️ **截 MP3 的头帧坑（第 29 轮踩过）**：LAME 编码的 MP3 **第一帧不是音频，是一个
-  `Info`（Xing 的 CBR 变体）头帧**，里面记着整首曲子的帧数/字节数，播放器**拿它算总时长**。
-  只切字节不改它 → 90 秒的片段会被显示成 3 分 30 秒、进度条走不到头。
-  `trim_mp3.py` 已会把**帧数 / 字节数 / TOC / LAME 标签里的「音乐总长」**一并改成截断后的真值。
-  改 MP3 相关逻辑时别把这段删了。
-- 母带（未截取的 8.0 MB 原文件）在 **`.workbuddy/_src/audio/`** —— 该目录被 `.gitignore` 覆盖，
+  注意：改成按需下载后，`error` 只会在**开始下载之后**才可能触发（观画那条要等打开视图）。
+- `bgm.mp3` = **1.03 MB / 90 秒 / 96 kbps 立体声**，由母带（8.0 MB / 210 秒 / 320 kbps）取前 90 秒
+  **重编码**而来（命令见 `assets/audio/README.txt`）。**96 kbps 是硬要求而非审美**：
+  320 kbps 需要持续 40 KB/s 才播得动，而这条线路单流常只有 20~60 KB/s，会断续；96 kbps 只要 12 KB/s。
+- 另一条**不重编码**的路子（想保持原码率、只截短时用）：
+  `python -I tools/trim_mp3.py <输入> <输出> <起点秒> <时长秒>`，帧对齐截断、零损失、不需要 ffmpeg。
+  ⚠️ 用它就会踩**头帧坑（第 29 轮）**：LAME 编码的 MP3 **第一帧不是音频，是一个
+  `Info`（Xing 的 CBR 变体）头帧**，里面记着整首曲子的帧数/字节数，播放器**拿它算总时长**；
+  只切字节不改它 → 90 秒的片段显示成 3 分 30 秒、进度条走不到头。
+  `trim_mp3.py` 已会把**帧数 / 字节数 / TOC / LAME 标签里的「音乐总长」**一并改成真值，别删这段逻辑。
+  （用 ffmpeg 重编码则不会有这个问题：头帧是它自己写的。）
+- 本机原无系统级 ffmpeg；现在用的是 **imageio-ffmpeg 自带的那个**
+  （`python -m pip install imageio-ffmpeg`，二进制在 `Lib/site-packages/imageio_ffmpeg/binaries/`）。
+- 母带（8.0 MB 原文件）在 **`.workbuddy/_src/audio/`** —— 该目录被 `.gitignore` 覆盖，
   **不发布**，所以不会拖慢 GitHub Pages。`.workbuddy/` 整个删掉前先确认不需要母带。
 
 ---
@@ -1348,3 +1362,59 @@ node tools/cdp_shot.mjs http://127.0.0.1:8899/index.html out.png \
     - 版本戳 `[b30-local]` → **`[b31-local]`**。
     - 📌 **留给用户的一个选择**：想再小只能**重编码降码率**（112–128 kbps、同 90 秒约 1.4–1.7 MB），
       但那要先有 ffmpeg、且是有损重编码。目前 3.4 MB 已比 8 MB 小一大截，**没有动**。
+      → **第 30 轮已做**：装了 imageio-ffmpeg，从母带重编码成 **96 kbps / 1.03 MB**，
+      并把两个 `<audio>` 改成按需下载。上面这条 3.4 MB / 320 kbps 是**当时的**状态，见第 30 条。
+
+30. **项目首次推送上线 GitHub Pages + 量到线上首访代价、配乐降码率并改按需下载（2026-10-13）**：
+    用户明确要求「把项目推 GitHub Page」。推送本身顺利（见下），但推完**顺手量了一遍线上首访**，
+    量出的数字改变了对配乐的处理方式，所以这条记的是「上线 + 上线暴露出的两件事」。
+    - **推送**：`git add -A` → 21 个文件 / +5795 −379 → commit `c892eb8` → 推 `main`。
+      用带端口的 remote（`https://github.com:443/...`，绕开这台机器全局配置里那条
+      `insteadOf https://gh-proxy.com/` 改写）+ 一次性凭据助手。Pages（legacy，branch `main`，path `/`）
+      45 秒后 `status: built`。**线上核验**：首页版本戳 `[b31-local]`；`bgm.mp3` / `ouhe.glb` /
+      `painting.jpg` / `three.module.js` / `RoomEnvironment.js` 全部 200，**字节数与本地逐一相同**。
+      `.workbuddy/`（含 8MB 母带与 58MB 的 `glb_orig`）在 `.gitignore` 里，**没进仓库**；`.bat` 以
+      CRLF+GBK 原始字节入库（.gitattributes 那条 `*.bat -text` 生效，入库 56 个 CRLF / 0 个裸 LF）。
+    - **本轮把线上体积翻了一倍**：上一版线上 8.8 MB → 本版 **17.4 MB**。主因不是配乐，是
+      **4 件袍类真模型（+4.4MB）终于进了仓库** —— 而**加载遮罩等的就是这 8 个模型**
+      （`index.html` 的 `loaded >= COLORS.length` → `#loading.classList.add('hide')`）。
+      线上此前那 4 件走的是程序化降级物 `buildGarment()`。
+    - **量到的带宽（本机 ↔ GitHub Pages，波动极大）**：单流 20.9 KB/s（第一次测）～62 KB/s；
+      6 并发合计最高 **175 KB/s**。真访问线上时浏览器 **6 分钟没加载完**（当时 `#bgm` 还 `readyState=0`）。
+    - **对照实验（把本地页面限速到 17 KB/s 复现，唯一变量 = 配乐）**：
+      · 带配乐（当时 3.4MB / 320kbps）：**加载遮罩 800.7 秒**解除，共下 12.14 MB；
+      · 屏蔽 `*bgm.mp3*`：**478.4 秒**解除，共下 7.42 MB。
+      → **配乐让首屏多等 322 秒（+5.4 分钟 / +67%）**，而它只占总字节的 28% ——
+      媒体请求抢带宽比按字节算的更凶。**这条是「按需下载」的直接依据。**
+    - **用户拍板**（AskUserQuestion 两问）：配乐 = **重编码 + 延迟加载**；模型 = **先不动**。
+    - **改动①：配乐 320 kbps → 96 kbps**。本机原无系统级 ffmpeg → 装 `imageio-ffmpeg`
+      （自带静态 ffmpeg 7.1），**从母带直接编码**（避免二次转码），前 90 秒：
+      `ffmpeg -i <母带> -t 90 -map_metadata 0 -c:a libmp3lame -b:a 96k -ac 2 -ar 44100 bgm.mp3`
+      → **1,080,973 B（1.03 MB）/ 90.07 秒 / 96 kbps**，比原来 3,600,804 B 小 70%。
+      **96 kbps 是硬要求而非审美**：320 kbps 要持续 40 KB/s 才播得动，而单流常只有 20~60 KB/s
+      → 会断续；96 kbps 只要 12 KB/s。ffmpeg 写的 Xing 头帧帧数自洽（`3447 × 1152 / 44100 = 90.05 秒`），
+      **不需要**再走 `trim_mp3.py` 那套头帧修补。
+    - **改动②：两个 `<audio>` 全部改成按需下载**（`preload="none"`）：
+      `armBgm()` 由首次 `pointerdown` 或点 ♪ 触发，`armPaintAudio()` 由 `openPainting()` 触发；
+      新增 `bgmWant` 表示「想放但还没备好」，`canplaythrough` 到了就自动起播。
+      HTML 与 JS 里都写了「**别改回 `preload="auto"`**」的警告与理由。
+      ℹ️ 副作用（可接受）：`error` 降级只在**开始下载之后**才可能触发 —— 观画那条要等打开视图。
+    - **本轮独立复核（真机无头渲染，不是推断）**：
+      · 抽出 module 跑 `node --check` → 语法 OK；页面 `Runtime.exceptionThrown` **0 条**。
+      · **走真点击路径**验按需下载：临时把 `index.html` 拷成根目录的 `_probe_r28.html` 注入 `__hook`
+        （探针副本必须放根目录，否则 importmap 找不到 three.js），摆相机到画前 `look(0,2.2,-20 → 0,2.65,-25.83)`，
+        用 CDP `Input.dispatchMouseEvent` 在画心投影处（700,450）**真点一下**触发
+        `canvas.click → pickAt → openPainting`。读数：
+        ① 加载完 `bgmReq=0`（**一个字节都没取**）、`#bgm` rs=0/net=0、♪ 置灰、`#paint-audio` 无 src；
+        ② 静置 1.5s 仍 `bgmReq=0`；
+        ③ 首次 pointerdown 后 `bgmReq=1`、**1,081,273 B**（正是新文件大小）、rs=4、`dur=90`、
+        `paused=false`、♪ 解禁；
+        ④ 点画后 `view-painting` 露出，**这时**`#paint-audio` 才拿到 src 并加载（rs=4、`dur=90`、
+        `err=null`、「配乐待置入」保持隐藏）。
+      · 探针副本**用完即删**（它落在项目根、`.gitignore` 不覆盖它，忘了删就会被提交并发布）。
+    - 文档：`README.md`（配乐段重写 + 版本戳）、`assets/audio/README.txt`（重编码命令 / 为什么 96k /
+      为什么按需下载）、`HANDOFF.md` §7.6 表格 + §7.9 与本文 §11 第 30 条；§3 目录树里 `trim_mp3.py` 那句仍在。
+    - 版本戳 `[b31-local]` → **`[b32-local]`**。
+    - 📌 **没做的**：模型瘦身（用户选「先不动」）。真要动，两条路：贴图 1024²→512²（掉画质，但
+      `tools/shrink_glb.py` 现成）、或 Draco/meshopt 几何压缩（画质几乎不掉、每件约 1.1MB→0.6MB，
+      但要装 gltf-transform 且页面里加解码器，风险最大）。**关键路径是这 7.9 MB，不是配乐。**

@@ -58,7 +58,7 @@
     ├── main/                  # 8 张 AIGC 主视觉（.jpg）
     ├── artifact/              # 8 张真实文物实拍（.jpg）
     ├── painting/              # painting.jpg（6×2 拼图）+ painting-wall.jpg（横排长卷），见该目录 README.txt
-    ├── audio/                 # bgm.mp3（馆内配乐，也是观画配乐；《高山流水》截取 90 秒）
+    ├── audio/                 # bgm.mp3（馆内配乐，也是观画配乐；《高山流水》前 90 秒 / 96 kbps）
     └── paper_texture.jpg      # 卷轴用的古旧宣纸纹理
 ```
 
@@ -68,7 +68,7 @@
 |--------|--------|------|
 | ~~`assets/painting/`~~ | ~~`painting.jpg`~~ | **已置入** —— 《月曼清游图》十二开 6×2 拼图，主展墙 + 观画视图 |
 | ~~`assets/painting/`~~ | ~~`painting-wall.jpg`~~ | **已置入** —— 十二开横排长卷，序厅喷绘长墙专用 |
-| ~~`assets/audio/`~~ | ~~`bgm.mp3`~~ | **已置入** —— 顶栏 ♪ 按钮解禁，入馆后首次点击画面自动循环播放 |
+| ~~`assets/audio/`~~ | ~~`bgm.mp3`~~ | **已置入** —— 入馆后首次点击画面才开始下载并循环播放，顶栏 ♪ 届时解禁 |
 | ~~`assets/audio/`~~ | ~~`painting.mp3`~~ | **不放了** —— 观画配乐改成**与馆内共用同一首**，见下 |
 
 **引导词**和**画中色标位置**写在 `index.html` 的 `ASSETS.painting.guide` / `ASSETS.painting.spots`。
@@ -77,13 +77,17 @@
 ### 配乐
 
 一首《高山流水》（古琴）两处共用：`ASSETS.bgm` 与 `ASSETS.painting.audio` 都指向
-`assets/audio/bgm.mp3`。馆内那处是 `<audio loop>`（首帧起播、循环）；观画那处是 `<audio controls>`
+`assets/audio/bgm.mp3`。馆内那处是 `<audio loop>`（循环）；观画那处是 `<audio controls>`
 播放器，不自动循环。**想让两处放不同的曲子**：把 `ASSETS.painting.audio` 改成一个新文件名，
 再把文件放进 `assets/audio/` 即可。
 
-`bgm.mp3` 是 3.4 MB / 90 秒（CBR 320 kbps）。原曲 8.0 MB / 210 秒，用
-`python -I tools/trim_mp3.py <输入> <输出> <起点秒> <时长秒>` 截出来的；母带不在仓库里
-（放在 gitignore 的 `.workbuddy/_src/audio/`，不会发布，也不拖慢 Pages）。
+**两个 `<audio>` 都是 `preload="none"`，页面加载时不取音频**：馆内那首等观众第一次点击画面
+才下载（备好即起播），观画那首等打开观画视图才下载。线上带宽被限速（实测单流 20~60 KB/s），
+配乐若跟 8 个模型抢管子，实测会让加载遮罩从 478 秒拖到 800 秒 —— 所以别改回 `preload="auto"`。
+
+`bgm.mp3` 是 1.03 MB / 90 秒 / 96 kbps，由母带（8.0 MB / 210 秒 / 320 kbps）取前 90 秒重编码而来；
+母带不在仓库里（放在 gitignore 的 `.workbuddy/_src/audio/`，不会发布，也不拖慢 Pages）。
+重编码命令与「为什么降到 96 kbps」见 `assets/audio/README.txt`。
 
 ---
 
@@ -152,4 +156,4 @@
   （或按 `HANDOFF.md` §8 起无头 Edge + `tools/cdp_shot.mjs` 抓控制台）。
 - 本地服务器（`tools/serve.py`）会发 `Cache-Control: no-store`，**改完刷新即可**。若页面仍是旧版，
   在那个标签页按 **Ctrl+F5**，并确认地址栏是 `127.0.0.1:8899`。
-- **一眼判断有没有加载到最新版**：看标签页标题末尾的版本戳（当前 `[b31-local]`）。
+- **一眼判断有没有加载到最新版**：看标签页标题末尾的版本戳（当前 `[b32-local]`）。

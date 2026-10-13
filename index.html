@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>传统古色 · 3D 博物馆与色谱长卷 [b31-local]</title>
+<title>传统古色 · 3D 博物馆与色谱长卷 [b32-local]</title>
 <style>
   /* ============================================================
      共享：变量 / 复位 / 字体
@@ -479,15 +479,18 @@
       <div class="pchips" id="paint-chips"></div>
       <div class="pblurb" id="paint-blurb">点击色名，查看该色在画中的位置与释义。</div>
       <div class="paudio">
-        <audio id="paint-audio" controls preload="metadata"></audio>
-        <div class="note" id="paint-audio-note" style="display:none">配乐待置入：assets/audio/painting.mp3</div>
+        <audio id="paint-audio" controls preload="none"></audio>
+        <div class="note" id="paint-audio-note" style="display:none">配乐待置入：assets/audio/bgm.mp3</div>
       </div>
     </aside>
   </div>
 </div>
 
-<!-- 环境配乐（无文件时自动禁用按钮，不会报错白屏） -->
-<audio id="bgm" loop preload="auto"></audio>
+<!-- 环境配乐（无文件时自动禁用按钮，不会报错白屏）
+     ⚠️ preload="none"：**不要在页面加载时就去取音频**。线上带宽被限速（实测单流 20~60KB/s），
+     音频若跟 8 个模型抢这条管子，会让加载遮罩更晚解除。改为「观众第一次点击画面时才下载」，
+     见下方 armBgm()。改回 auto 会把这个优化抵消掉。 -->
+<audio id="bgm" loop preload="none"></audio>
 
 <script type="importmap">
 {
@@ -3774,6 +3777,7 @@ function openPainting(colorId) {
   museumEl.classList.add('hidden');
   scrollViewEl.classList.add('hidden');
   paintViewEl.classList.remove('hidden');
+  armPaintAudio();                 // 到这一步才去取配乐（见「5. 配乐」段的说明）
   syncPaintFrame();
   selectPaintChip(colorId || null);
   renderer.setAnimationLoop(null);
@@ -3795,10 +3799,21 @@ syncPaintFrame();
 
 /* ============================================================
    5. 配乐（文件缺失时按钮自动置灰，不影响其它功能）
+   ⚠️ 两个 <audio> 都是 preload="none"，**页面加载时一律不取音频**：
+      线上带宽被限速，3.4MB 的配乐若跟 8 个模型抢管子，会拖慢加载遮罩。
+      改为按需下载 —— 馆内那首在「观众第一次点击画面」时（armBgm），
+      观画那首在「打开观画视图」时（armPaintAudio）。
    ============================================================ */
 const paEl   = document.getElementById('paint-audio');
 const paNote = document.getElementById('paint-audio-note');
-paEl.src = ASSETS.painting.audio;
+let paArmed = false;
+
+function armPaintAudio() {          // 打开观画视图时才去取（本函数被 openPainting 调用）
+  if (paArmed) return;
+  paArmed = true;
+  paEl.src = ASSETS.painting.audio;
+  paEl.load();
+}
 paEl.addEventListener('error', () => {
   paEl.style.display = 'none';
   paNote.style.display = 'block';
@@ -3806,38 +3821,46 @@ paEl.addEventListener('error', () => {
 
 const bgmEl  = document.getElementById('bgm');
 const bgmBtn = document.getElementById('bgm-btn');
-let bgmReady = false, bgmOn = false;
+let bgmReady = false, bgmOn = false, bgmArmed = false, bgmWant = false;
 
 function setBgm(on) {
   bgmOn = on;
   bgmBtn.classList.toggle('on', on);
   if (on) bgmEl.play().catch(() => {}); else bgmEl.pause();
 }
-bgmEl.src = ASSETS.bgm;
+function armBgm() {                 // 第一次真正需要时才去下载
+  if (bgmArmed) return;
+  bgmArmed = true;
+  bgmEl.src = ASSETS.bgm;
+  bgmEl.load();
+}
 bgmBtn.classList.add('off');
 bgmEl.addEventListener('canplaythrough', () => {
   bgmReady = true;
   bgmBtn.classList.remove('off');
   bgmBtn.title = '馆内环境配乐';
+  if (bgmWant) setBgm(true);        // 下载期间点过 ♪ / 点过画面 → 备好即起播
 });
 bgmEl.addEventListener('error', () => {
-  bgmReady = false; bgmOn = false;
+  bgmReady = false; bgmOn = false; bgmWant = false;
   bgmBtn.classList.remove('on');
   bgmBtn.classList.add('off');
   bgmBtn.title = '配乐待置入：' + ASSETS.bgm;
 });
 bgmBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  if (!bgmReady) return;
+  if (!bgmReady) { bgmWant = true; armBgm(); return; }   // 还没取 → 先取，备好自动起播
   setBgm(!bgmOn);
 });
-/* 浏览器要求用户手势后才能播放：首次点击时若配乐就绪就自动起播 */
+/* 浏览器要求用户手势后才能播放：首次点击时才开始下载并起播 */
 let bgmAuto = false;
 addEventListener('pointerdown', (e) => {
-  if (bgmAuto || !bgmReady || bgmOn) return;
+  if (bgmAuto || bgmOn) return;
   if (e.target && e.target.closest && e.target.closest('#bgm-btn')) return;
   bgmAuto = true;
-  setBgm(true);
+  bgmWant = true;
+  armBgm();
+  if (bgmReady) setBgm(true);
 });
 
 /* ---------- 启动 ---------- */
