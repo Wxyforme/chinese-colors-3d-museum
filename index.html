@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>传统古色 · 3D 博物馆与色谱长卷 [b32-local]</title>
+<title>传统古色 · 3D 博物馆与色谱长卷 [b37-local]</title>
 <style>
   /* ============================================================
      共享：变量 / 复位 / 字体
@@ -116,6 +116,20 @@
     transition: background 0.2s ease;
   }
   #info .open-scroll:hover { background: rgba(239,231,211,0.22); }
+  /* 原料卡上的实拍图（更新模块第 28 轮）：点开原料标本时显示的那张图。
+     图是 AIGC 示意图，框做成白纸照片的样子与卡片其余部分区分开。 */
+  #info .rawimg { margin-top: 11px; border-radius: 8px; overflow: hidden; background: #fff; }
+  #info .rawimg img { display: block; width: 100%; aspect-ratio: 1 / 1;
+                      object-fit: cover; object-position: 50% 62%; }
+  #info .rawimg .rcap { padding: 5px 10px 6px; font-size: 10px; letter-spacing: 0.1em;
+                        color: #7a6a4c; background: #f2ece0; }
+  /* 工序卡上的步骤铜牌（更新模块第 29 轮）：工序本身没有颜色，`.sw` 里的 34px 色块位就让给步骤号，
+     改成一方黄铜小牌 —— 与工序台前那块小铭牌上的「STEP n」同一写法，铜色取 BRASS_MAT 那一支。
+     尺寸与 .chip 严格一致，卡片头部的高度和基线不会因为换了卡而跳。 */
+  #info .sw .step { display: flex; align-items: center; justify-content: center;
+                    width: 34px; height: 34px; border-radius: 8px; flex: none;
+                    background: #b6934f; color: #241f16;
+                    font-size: 15px; font-weight: 700; }
 
   #loading {
     position: fixed; inset: 0; z-index: 40; background: var(--desk);
@@ -273,9 +287,17 @@
   #view-scroll .cap .obj { font-size: 12.5px; font-weight: 700; line-height: 1.5; color: var(--ink); }
   #view-scroll .cap .muse { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
   #view-scroll .cap .src { margin-top: 7px; padding-top: 7px; border-top: 1px dashed rgba(90,75,45,0.3); font-size: 9.5px; color: #8a7d63; line-height: 1.5; }
-  #view-scroll .poem-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 11px; }
-  #view-scroll .poem-wrap .pt { writing-mode: vertical-rl; text-orientation: upright; font-size: 20px; letter-spacing: 0.24em; line-height: 1.5; color: var(--ink); }
-  #view-scroll .poem-wrap .au { writing-mode: vertical-rl; font-size: 10.5px; color: var(--ink-soft); letter-spacing: 0.14em; }
+  /* ⚠️ 这一块的高度是「卡里剩多少就有多少」：窗口一小、段脚文字换行，卡就只剩 200px，
+     里面可用高度仅 138px（实测 1024×640）。固定 20px 字号下，七言一列要 173.6px、署名单列
+     要 228.8px，都会冲出卡下沿。所以把 .poem-wrap 声明成**尺寸查询容器**，字号与署名限高
+     都跟容器高度走：.pt 用 cqh 定字号（7 字 × 1.24 × 字号 ≤ 容器高），署名超过容器高就自动
+     折成两列。1440/1366/1280 下容器够高，字号仍封顶在 20px，观感与改动前一致。
+     老浏览器不认识容器查询单位 → 这两条声明被忽略，退回固定 20px（即改动前的行为），不会更糟。 */
+  #view-scroll .poem-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 11px; container-type: size; }
+  #view-scroll .poem-wrap .pt { writing-mode: vertical-rl; text-orientation: upright; font-size: min(20px, 10cqh); letter-spacing: 0.24em; line-height: 1.5; color: var(--ink); }
+  /* 竖排诗句按「，」分成两列（见 colorSeg 里的 poemCols）。列与列之间 11px + 字距 0.24em
+     ≈ 16px，明显宽于列内字距 4.8px，两列读起来才是分开的。作者署名再多让开 6px。 */
+  #view-scroll .poem-wrap .au { writing-mode: vertical-rl; font-size: 10.5px; color: var(--ink-soft); letter-spacing: 0.14em; margin-left: 6px; max-height: 100cqh; }
 
   #view-scroll .seg-foot { margin-top: 18px; display: flex; gap: 36px; align-items: flex-start; }
   #view-scroll .seg-foot .meaning { font-size: 13.5px; line-height: 1.95; color: #4a4230; max-width: 540px; }
@@ -306,6 +328,18 @@
   #view-museum .hbtn:hover { background: rgba(20,18,14,0.9); }
   #view-museum .hbtn.on { background: rgba(217,178,119,0.9); color: #241d12; border-color: #d9b277; }
   #view-museum .hbtn.off { opacity: 0.3; cursor: not-allowed; }
+
+  /* 「进入漫游」：主路仍是点空地，但贴着互动屏 / 画心时满屏都是可点对象、压根没有空地 ——
+     这个按钮与 F 键是那条**与射线命中无关**的入口。锁定后指针被浏览器收走，点了也收不到，直接隐去。 */
+  #view-museum .roambtn {
+    height: 30px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+    font-family: inherit; font-size: 13px; line-height: 1; letter-spacing: 0.08em;
+    background: rgba(20,18,14,0.55); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.25);
+    transition: background 0.2s ease, opacity 0.2s ease;
+  }
+  #view-museum .roambtn:hover { background: rgba(20,18,14,0.9); }
+  #view-museum .roambtn.hide { opacity: 0; pointer-events: none; }
 
   /* ============================================================
      视图 C · 观画（全屏放大 + 引导词 + 配乐）　与卷轴同属「离开展厅」的模态
@@ -384,6 +418,142 @@
   #view-painting .paudio audio { width: 100%; height: 34px; }
   #view-painting .paudio .note { font-size: 11px; letter-spacing: 0.06em; color: rgba(239,231,211,0.42); }
 
+  /* ============================================================
+     视图 D · 互动（第四单元 · 答题 / 填色卡 / 留言板 / 续色结语）
+     纸感暗底 + 金线，与卷轴、观画同一套配色 —— 刻意收着做，不抢八色。
+     ⚠️ 选择器一律加 #view-interact 前缀：观画那套 .p* 与本视图 .i* 互不借用。
+     ============================================================ */
+  #view-interact {
+    background: radial-gradient(120% 90% at 50% 0%, #1a1712 0%, #0d0b08 62%);
+    color: #efe7d3; overflow: auto;
+  }
+  #view-interact header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 26px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(20,18,14,0.92), rgba(20,18,14,0));
+  }
+  #view-interact header .cn { font-size: 17px; font-weight: 700; letter-spacing: 0.16em; }
+  #view-interact header .en { font-size: 9px; letter-spacing: 0.26em; color: rgba(239,231,211,0.5); }
+  #view-interact .back-btn {
+    pointer-events: auto; cursor: pointer; font-family: inherit;
+    font-size: 12px; letter-spacing: 0.14em;
+    background: rgba(20,18,14,0.6); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.28); border-radius: 18px;
+    padding: 7px 16px; transition: background 0.2s ease;
+  }
+  #view-interact .back-btn:hover { background: rgba(20,18,14,0.95); }
+  #view-interact .iwrap { max-width: 940px; margin: 0 auto; padding: 84px 26px 52px; }
+  /* 标签页 */
+  #view-interact .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  #view-interact .tab {
+    cursor: pointer; font-family: inherit; font-size: 12.5px; letter-spacing: 0.1em;
+    background: rgba(239,231,211,0.06); color: rgba(239,231,211,0.72);
+    border: 1px solid rgba(239,231,211,0.18); border-radius: 16px; padding: 7px 16px;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  #view-interact .tab:hover { background: rgba(239,231,211,0.13); }
+  #view-interact .tab.on { background: rgba(217,178,119,0.2); border-color: #d9b277; color: #f3e7cd; }
+  #view-interact .panel { display: block; }
+  #view-interact .panel.hidden { display: none; }
+  #view-interact .ititle { margin: 0 0 7px; font-size: 19px; font-weight: 700; letter-spacing: 0.12em; }
+  #view-interact .isub { font-size: 11.5px; line-height: 1.9; letter-spacing: 0.05em; color: rgba(239,231,211,0.42); margin-bottom: 20px; }
+  #view-interact .act {
+    cursor: pointer; font-family: inherit; font-size: 12.5px; letter-spacing: 0.1em;
+    background: rgba(217,178,119,0.14); color: #f0e3c6;
+    border: 1px solid rgba(217,178,119,0.45); border-radius: 18px; padding: 8px 20px;
+    transition: background 0.2s ease;
+  }
+  #view-interact .act:hover { background: rgba(217,178,119,0.26); }
+  #view-interact .act.ghost { background: rgba(239,231,211,0.06); border-color: rgba(239,231,211,0.22); color: rgba(239,231,211,0.78); }
+  #view-interact .act.ghost:hover { background: rgba(239,231,211,0.14); }
+  #view-interact .arow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 24px; }
+  #view-interact .say { font-size: 12.5px; letter-spacing: 0.05em; color: rgba(217,178,119,0.9); }
+  /* ① 答题 */
+  #view-interact .q { border-top: 1px solid rgba(239,231,211,0.12); padding: 18px 0 16px; }
+  #view-interact .qh { font-size: 14px; line-height: 1.9; margin-bottom: 11px; }
+  #view-interact .qh .no { color: rgba(217,178,119,0.85); margin-right: 7px; letter-spacing: 0.08em; }
+  #view-interact .opts { display: flex; flex-direction: column; gap: 6px; }
+  #view-interact .opt {
+    display: flex; align-items: flex-start; gap: 9px; cursor: pointer;
+    font-size: 12.5px; line-height: 1.85; color: rgba(239,231,211,0.82);
+    padding: 6px 10px; border-radius: 8px; border: 1px solid transparent;
+  }
+  #view-interact .opt:hover { background: rgba(239,231,211,0.06); }
+  #view-interact .opt input { margin: 4px 0 0; accent-color: #d9b277; }
+  #view-interact .q.ok .opt.good,
+  #view-interact .q.bad .opt.good { background: rgba(150,200,150,0.14); border-color: rgba(150,200,150,0.4); }
+  #view-interact .q.bad .opt.wrong { background: rgba(210,130,120,0.14); border-color: rgba(210,130,120,0.42); }
+  #view-interact .why {
+    display: none; margin-top: 11px; font-size: 12px; line-height: 1.95;
+    color: rgba(239,231,211,0.7); border-left: 2px solid rgba(217,178,119,0.5); padding-left: 12px;
+  }
+  #view-interact .q.ok .why, #view-interact .q.bad .why { display: block; }
+  /* ② 填色卡 */
+  #view-interact .cpal { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  #view-interact .cchip {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    font-family: inherit; font-size: 12px; letter-spacing: 0.08em;
+    background: rgba(239,231,211,0.07); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.2); border-radius: 16px; padding: 5px 12px 5px 6px;
+    transition: background 0.2s ease;
+  }
+  #view-interact .cchip i { width: 13px; height: 13px; border-radius: 50%; display: block; }
+  #view-interact .cchip.on { background: rgba(239,231,211,0.24); border-color: #efe7d3; }
+  #view-interact .cstage { display: flex; justify-content: center; }
+  #view-interact #interact-canvas {
+    width: 100%; max-width: 660px; height: auto; display: block; cursor: crosshair;
+    border: 1px solid rgba(239,231,211,0.16); border-radius: 4px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+  }
+  /* ③ 留言板 */
+  #view-interact .nform { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #view-interact .ntext {
+    flex: 1 1 300px; min-width: 180px; font-family: inherit; font-size: 13px;
+    background: rgba(239,231,211,0.07); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.22); border-radius: 8px; padding: 9px 12px;
+  }
+  #view-interact .ntext::placeholder { color: rgba(239,231,211,0.35); }
+  /* 昵称（可留空 = 匿名）—— 比正文输入框窄，不让它抢正文的位置 */
+  #view-interact .nwho {
+    flex: 0 0 156px; min-width: 118px; font-family: inherit; font-size: 13px;
+    background: rgba(239,231,211,0.07); color: #efe7d3;
+    border: 1px solid rgba(239,231,211,0.22); border-radius: 8px; padding: 9px 12px;
+  }
+  #view-interact .nwho::placeholder { color: rgba(239,231,211,0.35); }
+  #view-interact .ntip { font-size: 11px; letter-spacing: 0.05em; color: rgba(239,231,211,0.42); min-height: 16px; margin: 9px 0 18px; }
+  #view-interact .nlist { display: flex; flex-direction: column; gap: 9px; }
+  #view-interact .nrow {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: rgba(239,231,211,0.05); border: 1px solid rgba(239,231,211,0.12);
+    border-radius: 8px; padding: 10px 13px; font-size: 12.5px; line-height: 1.85;
+  }
+  #view-interact .nrow .nt { flex: 1 1 auto; color: rgba(239,231,211,0.88); word-break: break-all; }
+  #view-interact .nrow .nwho { flex: 0 0 auto; font-size: 11px; letter-spacing: 0.06em; color: rgba(217,178,119,0.72); }
+  #view-interact .nrow .ndt { flex: 0 0 auto; font-size: 10.5px; color: rgba(239,231,211,0.34); letter-spacing: 0.05em; }
+  #view-interact .nrow .ndel {
+    flex: 0 0 auto; cursor: pointer; font-family: inherit; font-size: 11px;
+    background: none; border: none; color: rgba(239,231,211,0.35); padding: 2px 4px;
+  }
+  #view-interact .nrow .ndel:hover { color: rgba(210,140,130,0.95); }
+  #view-interact .nempty { font-size: 12.5px; color: rgba(239,231,211,0.38); }
+  /* ④ 续色 · 结语 */
+  #view-interact .xrow {
+    display: flex; align-items: flex-start; gap: 15px;
+    padding: 14px 0; border-top: 1px solid rgba(239,231,211,0.12);
+  }
+  #view-interact .xsw { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.35); }
+  #view-interact .xbody { flex: 1 1 auto; }
+  #view-interact .xname { font-size: 15px; letter-spacing: 0.1em; }
+  #view-interact .xname .xhex { margin-left: 10px; font-size: 11px; letter-spacing: 0.04em; color: rgba(239,231,211,0.4); }
+  #view-interact .xmeta { font-size: 11.5px; letter-spacing: 0.06em; color: rgba(217,178,119,0.8); margin: 3px 0 5px; }
+  #view-interact .xbrief { font-size: 12.5px; line-height: 1.95; color: rgba(239,231,211,0.75); }
+  #view-interact .closing {
+    margin-top: 26px; padding: 20px 22px; white-space: pre-wrap;
+    font-size: 13px; line-height: 2.1; color: rgba(239,231,211,0.82);
+    background: rgba(239,231,211,0.04); border: 1px solid rgba(217,178,119,0.22); border-radius: 8px;
+  }
+
   @media (max-width: 900px) {
     :root { --segw: 92vw; }
     #view-scroll .seg-mid { grid-template-columns: 1fr; gap: 10px; overflow-y: auto; }
@@ -395,6 +565,12 @@
     #view-painting .pframe { max-width: 94vw; }
     #view-painting .pph { width: 82vw; height: 40vh; min-height: 220px; }
     #view-painting .pside { flex: 1 1 auto; width: 100%; max-width: 620px; }
+    #view-interact .iwrap { padding: 74px 18px 40px; }
+    #view-interact .tabs { gap: 6px; margin-bottom: 18px; }
+    #view-interact .tab { font-size: 12px; padding: 6px 12px; }
+    #view-interact #interact-canvas { max-width: 96vw; }
+    #view-interact .nform { gap: 8px; }
+    #view-interact .nwho { flex: 1 1 100%; }
   }
 </style>
 </head>
@@ -411,11 +587,12 @@
     </div>
     <div class="tools">
       <div class="dots" id="dots-museum"></div>
+      <button class="roambtn" id="roam-btn" title="进入第一人称漫游（也可按 F 键）">进入漫游</button>
       <button class="hbtn" id="bgm-btn" title="馆内环境配乐">♪</button>
     </div>
   </header>
 
-  <div class="hint" id="hint">走近展品 · 左键点击进入卷轴 · 点击空地漫游 · WASD 移动</div>
+  <div class="hint" id="hint">走近展品 · 左键点击进入卷轴 · 地面金色箭头＝参观动线 · 壹区原料／工序台、肆区三块板可点 · 点击空地或按 F 漫游 · WASD 移动</div>
   <div class="aim" id="aim">
     <span class="ring"></span>
     <span class="tip serif" id="aim-tip">点击进入卷轴</span>
@@ -452,11 +629,11 @@
   <div class="pbar"><i id="pfill"></i></div>
 </div>
 
-<!-- ==================== 视图 C：观画（第二单元 · 全屏放大） ==================== -->
+<!-- ==================== 视图 C：观画（第三单元 · 全屏放大） ==================== -->
 <div id="view-painting" class="view hidden">
   <header>
     <div class="brand">
-      <div class="cn serif" id="paint-bar-title">第二单元 · 绘事・绢上观</div>
+      <div class="cn serif" id="paint-bar-title">叁 · 绘事・绢上观</div>
       <div class="en mono">Reading a Painting</div>
     </div>
     <button class="back-btn" id="paint-back">‹ 返回展厅</button>
@@ -483,6 +660,71 @@
         <div class="note" id="paint-audio-note" style="display:none">配乐待置入：assets/audio/bgm.mp3</div>
       </div>
     </aside>
+  </div>
+</div>
+
+<!-- ==================== 视图 D：互动（第四单元 · 感知・互动） ==================== -->
+<div id="view-interact" class="view hidden">
+  <header>
+    <div class="brand">
+      <div class="cn serif">肆 · 感知・互动</div>
+      <div class="en mono">Perceive　互动区</div>
+    </div>
+    <button class="back-btn" id="interact-back">‹ 返回展厅</button>
+  </header>
+
+  <div class="iwrap">
+    <div class="tabs" id="interact-tabs">
+      <button class="tab" id="tab-quiz">① 八色答题</button>
+      <button class="tab" id="tab-color">② 填色卡</button>
+      <button class="tab" id="tab-board">③ 留言板</button>
+      <button class="tab" id="tab-extra">④ 续色 · 结语</button>
+    </div>
+
+    <section class="panel hidden" id="itab-quiz">
+      <h3 class="ititle">关于八色，你还记得多少</h3>
+      <div class="isub">十道题，答案都在这座馆里找得到 —— 交卷后每题会给出来处。</div>
+      <div id="quiz-list"></div>
+      <div class="arow">
+        <button class="act" id="quiz-submit">交　卷</button>
+        <button class="act ghost" id="quiz-reset">重　做</button>
+        <span class="say" id="quiz-score"></span>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="itab-color">
+      <h3 class="ititle">填一幅八色山水</h3>
+      <div class="isub">色盘只有本馆八色：天宜月白、月宜藕合、远山宜黛蓝、主峰宜石青、
+        坡石宜苍黄、江水宜霁蓝、松宜松花、秋林宜杏黄。选一支，点画上的部位上色；满意了导出 PNG 带走。</div>
+      <div class="cpal" id="card-pal"></div>
+      <div class="cstage">
+        <canvas id="interact-canvas" width="1800" height="1240"></canvas>
+      </div>
+      <div class="arow">
+        <button class="act" id="card-export">导出 PNG</button>
+        <button class="act ghost" id="card-clear">清空重来</button>
+        <span class="say" id="card-note">先选一支颜色，再点画上的部位。</span>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="itab-board">
+      <h3 class="ititle">留言墙</h3>
+      <div class="isub">写一句、留个名（或匿名），它会和别人的字一起挂到展厅那面墙上。</div>
+      <div class="nform">
+        <input class="nwho" id="note-who" type="text" maxlength="8" placeholder="昵称（可留空＝匿名）">
+        <input class="ntext" id="note-input" type="text" maxlength="40" placeholder="不超过 40 字 —— 一句关于颜色的话">
+        <button class="act" id="note-add">贴到墙上</button>
+      </div>
+      <div class="ntip" id="note-tip"></div>
+      <div class="nlist" id="note-list"></div>
+    </section>
+
+    <section class="panel hidden" id="itab-extra">
+      <h3 class="ititle">八色之外</h3>
+      <div class="isub">下列七色不属于本馆八色体系，只作补录；色值为通用色谱近似值，非文物取样。</div>
+      <div id="extra-list"></div>
+      <div class="closing" id="extra-closing"></div>
+    </section>
   </div>
 </div>
 
@@ -613,7 +855,18 @@ const ASSETS = {
         + '霁蓝的沉郁、黛蓝的幽邃、月白的清浅、\n'
         + '石青的矿物光泽、藕合的柔紫，\n'
         + '还有松花、杏黄、苍黄层次各异的暖调——\n'
-        + '读懂中国人看待色彩的浪漫。'
+        + '读懂中国人看待色彩的浪漫。',
+    /* 第二段：**为什么是这八色**（更新模块第 35 轮 润色意见.txt 原文）。
+       原来这块展板只有上面那七行诗意的引子，没交代选色理由；这段补上「少而深」的策展口径。
+       展板因此加高到 canvas 1024×1240 / 板面 2.50×3.03（见 plate 调用处）。 */
+    body2: '本展厅并不试图穷尽上百种传统色，而是选取\n'
+         + '霁蓝、黛蓝、月白、石青、藕合、松花、杏黄、苍黄\n'
+         + '八种富有代表性的雅色作为叙事主线：\n'
+         + '从矿物／植物色源、古画实证、生活器物、文化意蕴逐层展开。\n'
+         + '其余传统色彩仅作背景补充，以「少而深」代替「多而浅」，\n'
+         + '帮助观众建立对中国色彩体系的具象感知。\n'
+         + '八色的选取兼顾正色与间色、冷与暖、矿物与植物来源，\n'
+         + '覆盖蓝系、紫系、黄系，具有样本代表性 —— 并非完整色谱。'
   },
   u1: { note: '颜色从哪里来？—— 一半从石头里来，一半从草木里来。\n\n'
              + '本厅按加工的次序陈列：西墙是原料，北墙是工序，南墙是成品。\n'
@@ -626,10 +879,24 @@ const ASSETS = {
              + '干料本是褐的、绿的，颜色是煮出来、也染到绢上去的。\n\n'
              + '展柜分「原料 → 碎料 → 色粉」三层并列；水色另附一方染色绢小样。\n'
              + '全厅用 3000–4000K 中性白光自斜侧照射，不用彩光、不加特效，只还原本色。' },
-  u4: { note: '互动屏 · 点击色名，跳转画中对应位置并朗读色彩文案\n〔待接入〕' }
+  u4: {
+    /* 互动屏正文（墙面贴图）：告诉观众这一厅哪三块板点得动 */
+    note: '这一厅的三块展板都点得动 ——\n'
+        + '· 色卡墙（北墙）下部：八色之外的「补录七色」\n'
+        + '· 这块互动屏：十道关于八色的题，交卷就有解析\n'
+        + '· 留言墙（南墙）：写一句，可署名也可匿名，会挂上那面墙\n\n'
+        + '点击任意一块即可进入互动区。',
+    /* 结语：3D 留言墙与互动区第 ④ 页共用同一份 */
+    closing: '八色之外，传统色还有一个长得多的名单。这里只择其七，略作补记。\n'
+           + '颜色本来没有名字 —— 是古人看天、看石、看草木时，替它们一一取了名：\n'
+           + '于是雨霁有天青，矿石有石青，槐蕾有松花。\n'
+           + '做了答题、填色与这面留言墙，不是为了考谁，只想请你也动一动手：\n'
+           + '想想石青为什么要一遍遍水飞，月白为什么要一次次兑淡。\n'
+           + '你写下的那句话，会和别人的字一起挂在墙上。'
+  }
 };
 
-/* 第二单元 8 块立式展牌：色名取自 COLORS，画中位置与释义见你的策展方案 */
+/* 第三单元 8 块立式展牌：色名取自 COLORS，画中位置与释义见你的策展方案 */
 const PLATES = [
   { id:'jilan',     pos:'画中栏杆、深色衣袍', txt:'沉雨初歇，深沉静穆之蓝' },
   { id:'dailan',    pos:'远景山影',           txt:'远山幽黛，青黑沉静' },
@@ -642,13 +909,25 @@ const PLATES = [
 ];
 const COLOR_BY_ID = Object.fromEntries(COLORS.map(c => [c.id, c]));
 
-/* 各单元标题（同时用于门楣、标题墙、导览图） */
+/* 各单元标题（同时用于门楣、标题墙、导览图）
+   ⚠️ 2026-10-14 用户要求：把绘事与物色的**单元序号对调**（展厅与展品一个没动）。
+      所以现在 u2 = 第三单元 · 绘事（内厅）、u3 = 第二单元 · 物色（八角主厅）——
+      **键名与序号不再对应**，别看见 `u2` 就当「第二单元」去"修正"回来。
+   改序号只需动这里的 cn 串：两条标题带（约 1307 / 3031 行）、观画视图标题（467 / 3372 / 3732）
+   都读这一处；平面导览图（2594/2595）与剖面游览图（2931/2932）的厅名小注是另写死的，要同步。
+
+   ⚠️ 2026-10-15 第 35 轮：单元序号按用户要求**全站改成单个繁体数字**（壹 / 贰 / 叁 / 肆），
+      后头照旧承接主题（「壹 · 色源・万物生」）。定下的写法：
+        · 简称（导览图、标题带、卡片落款）＝「壹 · 色源」这种「数字 + 中点 + 厅名」
+        · 正文里提到时写「壹区」「肆区」—— 裸一个「壹」字在句子里读不通。
+      序厅不编号，仍是「序厅」。
+      同一个「壹」也用在第一单元内部三段导视牌上会打架，那三块已改甲乙丙，见 zoneSign 调用处。
+   ⚠️ 原来的 `prologue` 键（`'序 厅'`）全文件没有一处读过 —— 死数据，本轮删掉。 */
 const UNITS = {
-  prologue: { cn:'序 厅', en:'PROLOGUE', note:'中国颜色取自天地草木，自带文学意境' },
-  u1: { cn:'第一单元 · 色源・万物生', en:'SOURCES',  note:'矿物与植物——颜色从哪里来' },
-  u2: { cn:'第二单元 · 绘事・绢上观', en:'ON SILK',  note:'清 陈枚《月曼清游图》' },
-  u3: { cn:'第三单元 · 物色・入人间', en:'IN LIFE',  note:'器物中的中国传统色' },
-  u4: { cn:'第四单元 · 感知・互动',   en:'PERCEIVE', note:'色卡墙 · 互动屏 · 留言墙' }
+  u1: { cn:'壹 · 色源・万物生', en:'SOURCES',  note:'矿物与植物——颜色从哪里来' },
+  u2: { cn:'叁 · 绘事・绢上观', en:'ON SILK',  note:'清 陈枚《月曼清游图》' },
+  u3: { cn:'贰 · 物色・入人间', en:'IN LIFE',  note:'器物中的中国传统色' },
+  u4: { cn:'肆 · 感知・互动',   en:'PERCEIVE', note:'色卡墙 · 互动屏 · 留言墙' }
 };
 
 /* ============================================================
@@ -658,17 +937,38 @@ const UNITS = {
      plant 植物水色 —— 草木浸出：干料   → 粗碎料 → 色粉（+ 染色绢）
    色名与 hex 不在这里重复写：用 cid 关联 COLORS。
    form 决定「干料/原石」层的形制：
-     rock 矿石原石 / bud 槐米串 / fruit 栀子果 / chip 苏木木屑 / bundle 蓼蓝束
+     rock 矿石原石 / oolitic 赭石钉头鲕状块 / bud 槐米串 / fruit 栀子果
+     / chip 苏木心材木段木片 / bundle 蓼蓝叶片
    ============================================================ */
+/* desc = 点开原料时卡片上的说明（更新模块第 23 轮加）。一处改、原料墙与成品柜同时生效。
+   origin / form 按用户文档改（2026-10-14）：产地一律取「主要产区」精简方案，
+   只写确有的产区，不另加没把握的说法 —— 卡片与标本铭牌都照抄这一份。
+   img = 原料实拍示意（更新模块第 28 轮加）：assets/raw/raw_<cid>.jpg，缺图时原料卡自动不显示这一块。 */
 const MINERALS = [
-  { cid:'shiqing',   kind:'stone', form:'rock',   mat:'蓝铜矿',        comp:'Cu₃(CO₃)₂(OH)₂',              en:'AZURITE',            origin:'云南 · 东川',              pigment:'石青' },
-  { cid:'jilan',     kind:'stone', form:'rock',   mat:'青金石',        comp:'(Na,Ca)₈(AlSiO₄)₆(S,SO₄,Cl)₂', en:'LAZURITE',           origin:'阿富汗 · 巴达赫尚（丝路输入）', pigment:'霁蓝' },
-  { cid:'dailan',    kind:'stone', form:'rock',   mat:'蓝铜矿・青金石', comp:'Cu₃(CO₃)₂(OH)₂ 等',            en:'AZURITE / LAZURITE', origin:'云南 · 西域',              pigment:'黛蓝' },
-  { cid:'canghuang', kind:'stone', form:'rock',   mat:'赭石',          comp:'Fe₂O₃',                        en:'HEMATITE',           origin:'山西 · 代县',              pigment:'苍黄' },
-  { cid:'songhua',   kind:'plant', form:'bud',    mat:'槐米（槐花蕾）', comp:'芦丁等黄酮类',                  en:'SOPHORA BUD',        origin:'华北 · 各地',              pigment:'槐黄・松花' },
-  { cid:'xinghuang', kind:'plant', form:'fruit',  mat:'栀子果实',      comp:'藏红花素类',                    en:'GARDENIA FRUIT',     origin:'江南 · 两湖',              pigment:'栀子' },
-  { cid:'ouhe',      kind:'plant', form:'chip',   mat:'苏木（+胭脂）',  comp:'苏木精 + 胭脂红酸',              en:'SAPANWOOD',          origin:'广东 云南 / 西北',          pigment:'苏木' },
-  { cid:'yuebai',    kind:'plant', form:'bundle', mat:'蓼蓝（复合色）', comp:'靛蓝素',                        en:'POLYGONUM INDIGO',   origin:'江南 · 各地',              pigment:'蓼蓝' }
+  { cid:'shiqing',   kind:'stone', form:'rock',   mat:'蓝铜矿',        comp:'Cu₃(CO₃)₂(OH)₂',              en:'AZURITE',            origin:'广东阳春 · 湖北大冶',       pigment:'石青',
+    img:'assets/raw/raw_shiqing.jpg',
+    desc:'蓝铜矿研磨而成，是古代最重要的蓝色矿物颜料。矿石越纯、颗粒越细，色越沉；同一块石头经水飞漂洗，能分出深浅不同的几层青。' },
+  { cid:'jilan',     kind:'stone', form:'rock',   mat:'青金石',        comp:'(Na,Ca)₈(AlSiO₄)₆(S,SO₄,Cl)₂', en:'LAZURITE',           origin:'阿富汗 · 巴达赫尚（丝路输入）', pigment:'霁蓝',
+    img:'assets/raw/raw_jilan.jpg',
+    desc:'青金石经丝路自西域输入，得来不易。研磨前要拣去杂色石质，只取最纯净的蓝，古人对这种色一向用得郑重而节省。' },
+  { cid:'dailan',    kind:'stone', form:'rock',   mat:'蓝铜矿・青金石', comp:'Cu₃(CO₃)₂(OH)₂ 等',            en:'AZURITE / LAZURITE', origin:'云南 · 西域',              pigment:'黛蓝',
+    img:'assets/raw/raw_dailan.jpg',
+    desc:'黛蓝不是一个矿种 —— 蓝铜矿、青金石都能用，色偏青黑，近于古时画眉的黛。古画里晕染远山、烧造墨蓝釉色，多用它打底。' },
+  { cid:'canghuang', kind:'stone', form:'oolitic', mat:'赭石',         comp:'Fe₂O₃',                        en:'HEMATITE',           origin:'山西代县（古代郡）',       pigment:'苍黄',
+    img:'assets/raw/raw_canghuang.jpg',
+    desc:'赭石是氧化铁质矿石，多为鲕状、豆状或肾状的坚硬块体 —— 松散土状的是普通赭土，不算代赭。条痕红色，可采之处极广，是先民最早使用的矿物颜料之一；色相苍黄质朴、耐光极好，古画里的土地与远山常见它的底子。' },
+  { cid:'songhua',   kind:'plant', form:'bud',    mat:'槐米（槐花蕾）', comp:'芦丁等黄酮类',                  en:'SOPHORA BUD',        origin:'黄淮流域 · 鲁豫冀',        pigment:'槐黄・松花',
+    img:'assets/raw/raw_songhua.jpg',
+    desc:'槐米是槐树未开的花蕾，晒干后呈黄绿。所含芦丁配媒染剂可染出黄到黄绿的层次，是植物染黄里最常用的一味。' },
+  { cid:'xinghuang', kind:'plant', form:'fruit',  mat:'栀子果实',      comp:'藏红花素类',                    en:'GARDENIA FRUIT',     origin:'长江以南 · 赣湘',          pigment:'栀子',
+    img:'assets/raw/raw_xinghuang.jpg',
+    desc:'栀子果实含藏红花素类色素，入水煮即出色，偏暖橙黄。上色容易而耐光一般，古时多用于丝绢、纸笺的浅暖色。' },
+  { cid:'ouhe',      kind:'plant', form:'chip',   mat:'苏木（+胭脂）',  comp:'苏木精 + 胭脂红酸',              en:'SAPANWOOD',          origin:'东南亚 · 华南引种',        pigment:'苏木',
+    img:'assets/raw/raw_ouhe.jpg',
+    desc:'苏木心材含苏木精，配媒染呈红紫；入药的只用去皮带边材的心材，呈木段、木片状，断面黄红转红棕。胭脂取自虫料。两色相合，才得藕合这种淡而柔的粉紫 —— 它是一种配色，不是某一味原料的本色。' },
+  { cid:'yuebai',    kind:'plant', form:'bundle', mat:'蓼蓝（复合色）', comp:'靛蓝素',                        en:'POLYGONUM INDIGO',   origin:'我国南北多地栽培',         pigment:'蓼蓝',
+    img:'assets/raw/raw_yuebai.jpg',
+    desc:'制靛的色素只在叶片里，茎几乎不含 —— 古法虽割带叶嫩茎入池，也可单摘叶制靛。蓼蓝叶发酵得靛，靛蓝染出的本是深蓝；月白是把它一次次兑淡、反复浸染得来的极浅色，属植物一系，却不是任何一味原料的原色。' }
 ];
 const MINERAL_BY_CID = Object.fromEntries(MINERALS.map(m => [m.cid, m]));
 /* 标本墙两段用：北半 石色、南半 水色（各 4 色 × 3 件 = 24） */
@@ -677,12 +977,126 @@ const PLANT_CIDS = MINERALS.filter(m => m.kind === 'plant').map(m => m.cid);
 const IS_STONE = m => m.kind === 'stone';
 
 /* ============================================================
+   0.7 第四单元 · 补录七色 + 答题 + 留言存储（更新模块第 24 轮加）
+   八色始终是主角：这七色只是「续」，色值一律标注为通用色谱近似值，不作文物取样。
+   kind 沿用第一单元的分法 —— stone 矿物石色 / plant 草木水色
+   （花青・藤黄・胭脂・檀色 正是国画里常说的「水色三味」那一路）。
+   ============================================================ */
+const EXTRA_COLORS = [
+  { id:'shilv',     name:'石绿', hex:'#4E9C7A', kind:'stone', mat:'孔雀石',
+    brief:'孔雀石研磨的矿物绿，与石青常共生，青翠而沉。古画里的山石、绢本的绿多用它打底。' },
+  { id:'zhusha',    name:'朱砂', hex:'#C8352B', kind:'stone', mat:'辰砂（HgS）',
+    brief:'最古老的红色矿物颜料，色正而重，古称「丹」。用量省，点朱印、染衣袍重色最见分量。' },
+  { id:'zheshi',    name:'赭石', hex:'#9C5333', kind:'stone', mat:'氧化铁（Fe₂O₃）',
+    brief:'最常见的土红石色，随地可采。本馆壹区「苍黄」的原料正是它 —— 苍黄即其研磨后的色相。' },
+  { id:'huaqing',   name:'花青', hex:'#2E5C8A', kind:'plant', mat:'靛蓝提制',
+    brief:'国画常用的蓝，可作颜料亦可作染，多为靛蓝再行精制。与藤黄相调即得草绿。' },
+  { id:'tenghuang', name:'藤黄', hex:'#F3C13B', kind:'plant', mat:'藤黄树树脂',
+    brief:'明黄微偏青绿，历代多作舶来颜料。有毒，用时以水化开，不作内服。' },
+  { id:'yanzhi',    name:'胭脂', hex:'#B23A48', kind:'plant', mat:'红蓝花／胭脂虫',
+    brief:'妆面与绘画两用，色偏玫瑰红 —— 本馆「藕合」那支柔紫，便是它和苏木配出来的。' },
+  { id:'tanse',     name:'檀色', hex:'#B3775F', kind:'plant', mat:'檀木染',
+    brief:'偏红褐的浅赭红，古时多用于家具、织物与浅染，色调比赭石温和。' }
+];
+
+/* 十道题：题干、选项、解析全部取自 COLORS / MINERALS / ASSETS.u1.note 里已核实的事实，
+   不引入新说法。a = 正确项下标（刻意打散，不都落在第一项）。 */
+const QUIZ = [
+  { q:'石青的原料是哪一种矿物？',
+    opts:['青金石', '赭石', '蓝铜矿', '栀子果'], a:2,
+    why:'壹区西墙石色标本：石青取蓝铜矿（Cu₃(CO₃)₂(OH)₂），水飞漂洗后分出头青、二青、三青的色阶。' },
+  { q:'「苍黄」取自哪种矿石？',
+    opts:['蓝铜矿', '赭石', '槐米', '青金石'], a:1,
+    why:'苍黄即赭石（Fe₂O₃）研磨后的色相。赭石是最常见的土红石色，随地可采，也是先民最早使用的矿物颜料之一。' },
+  { q:'「月白」在原料分类上属于哪一类？',
+    opts:['矿物石色', '植物水色', '金属色', '人工合成色'], a:1,
+    why:'月白是蓼蓝制靛后反复兑淡得来的，属植物一系 —— 但它是复合色，不是任何一味原料的原色。' },
+  { q:'「藕合」由哪两味合配而成？',
+    opts:['槐米 + 栀子', '蓝铜矿 + 青金石', '蓼蓝 + 苏木', '苏木 + 胭脂'], a:3,
+    why:'苏木心材含苏木精，配媒染呈红紫；胭脂取自虫料。两色相合，才得藕合这种淡而柔的粉紫 —— 它是一种配色。' },
+  { q:'霁蓝所用的青金石主要来自哪里？',
+    opts:['云南东川', '丝路输入（西域 · 巴达赫尚）', '山西代县', '江南两湖'], a:1,
+    why:'青金石经丝路自西域输入，得来不易。古人对这种色一向用得郑重而节省。' },
+  { q:'矿石「粉碎 → 水飞 → 静置分层」，是为了得到什么？',
+    opts:['更多的重量', '更久的保存', '深浅不同的色阶', '更强的光泽'], a:2,
+    why:'同一块石头经水飞漂洗，颗粒由粗至细、色由深转浅 —— 头青、二青、三青就是一块石头里漂出来的色阶。' },
+  { q:'「松花」取自何物？',
+    opts:['栀子果实', '苏木木屑', '蓼蓝叶', '槐米（槐花蕾）'], a:3,
+    why:'槐米是槐树未开的花蕾，所含芦丁配媒染可染出黄到黄绿的层次，是植物染黄里最常用的一味。' },
+  { q:'「杏黄」取自何物？',
+    opts:['栀子果实', '槐米', '赭石', '胭脂'], a:0,
+    why:'栀子果实含藏红花素类色素，入水煮即出色，偏暖橙黄；上色容易而耐光一般，古时多用于丝绢、纸笺的浅暖色。' },
+  { q:'下列哪一组的「石色 / 水色」划分是对的？',
+    opts:['石色：石青・霁蓝・黛蓝・苍黄　　水色：松花・杏黄・藕合・月白',
+          '石色：石青・松花・黛蓝・苍黄　　水色：霁蓝・杏黄・藕合・月白',
+          '石色：石青・霁蓝・杏黄・苍黄　　水色：松花・黛蓝・藕合・月白',
+          '石色：霁蓝・黛蓝・藕合・月白　　水色：石青・松花・杏黄・苍黄'], a:0,
+    why:'石色四件取自蓝铜矿、青金石与赭石；水色四件取自槐米、栀子、苏木配胭脂、蓼蓝。壹区西墙正是按这两半分段的。' },
+  { q:'「黛蓝」为什么不是一个单独的矿种？',
+    opts:['它是从植物里提取的', '蓝铜矿、青金石都能用，色偏青黑', '它是两种矿物按固定比例合成', '它来自海外贸易的独有矿石'], a:1,
+    why:'黛蓝近于古时画眉的黛，蓝铜矿与青金石皆可用 —— 它是一个色名、一种色相，不是某一味专属原料。' }
+];
+
+/* ---------- 留言存储：localStorage（键 museum3d:notes:v1） ----------
+   ⚠️ node 桩环境里没有 localStorage 这个全局，**裸读会 ReferenceError 把整个模块炸掉**
+   （那就等于白屏）—— 所以读写一律先判存在、再 try/catch（无痕模式里也会抛）。 */
+const NOTE_KEY = 'museum3d:notes:v1';
+const NOTE_MAX = 60, NOTE_LEN = 40, NOTE_WHO = 8;   // 昵称最多 8 字（便签上只留一小行款）
+const NOTE_PAPER = ['#f2e6b8', '#e7d3c0', '#d8e2c4', '#e3d5e6', '#f0dcc2', '#d7e0e8'];
+let noteSeq = 0;
+
+/* FNV-1a：把留言 id 变成一个稳定的数 —— 便签的倾角与配色都从它派生。
+   ⚠️ 不许用 Math.random()：一刷新墙就换个样子（项目硬规矩）。 */
+function strSeed(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function lsGetNotes() {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(NOTE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(n => n && typeof n.text === 'string' && n.text) : [];
+  } catch (e) { return []; }
+}
+function lsSetNotes(arr) {
+  if (typeof localStorage === 'undefined') return false;
+  try { localStorage.setItem(NOTE_KEY, JSON.stringify(arr.slice(0, NOTE_MAX))); return true; }
+  catch (e) { return false; }
+}
+function newNoteId() { return Date.now().toString(36) + '-' + (noteSeq++).toString(36); }
+
+/* 加 / 删一条留言：写完立刻重画互动区列表 **与 3D 那面墙**（drawBoardWall 是函数声明，
+   定义在第四单元那一段，提升过了，这里可以直接调）。 */
+function addNote(text, who) {
+  const t = String(text == null ? '' : text).replace(/\s+/g, ' ').trim().slice(0, NOTE_LEN);
+  if (!t) return false;
+  const w = String(who == null ? '' : who).replace(/\s+/g, ' ').trim().slice(0, NOTE_WHO);
+  const list = lsGetNotes();
+  list.unshift({ id: newNoteId(), text: t, who: w, t: Date.now() });
+  lsSetNotes(list);
+  renderNotes();
+  drawBoardWall();
+  return true;
+}
+function deleteNote(id) {
+  lsSetNotes(lsGetNotes().filter(n => n.id !== id));
+  renderNotes();
+  drawBoardWall();
+}
+
+/* ============================================================
    1. 视图状态机
    ============================================================ */
 let currentView = 'museum';
 
 const museumEl = document.getElementById('view-museum');
 const scrollViewEl = document.getElementById('view-scroll');
+/* 第四单元互动区（更新模块第 24 轮新增的第四个视图）。
+   取在这里而不是 4.5 段里 —— 4.5 段在文件末尾，而 openScroll / backToMuseum /
+   openPainting / closePainting 都在它前面定义，函数体里引用靠 const 的 TDZ 兜不住。 */
+const interactViewEl = document.getElementById('view-interact');
 
 /* ---------- 3D 场景 ---------- */
 const canvas = document.getElementById('c3d');
@@ -825,7 +1239,7 @@ const WOOD_MAT  = new THREE.MeshStandardMaterial({ color: '#5c4b34', roughness: 
 /* ---------- 第一单元展柜专用材质（第 21 轮）----------
    玻璃要「微弱自然反光」就得有东西可反 —— 此前全场景没有任何 envMap，
    clearcoat 只反得出几盏灯的亮点，看着像塑料。这里烘一张环境贴图，
-   **只挂到 CASE_GLASS 上**：GLASS_MAT 是第三单元与 buildVitrine 共用的，
+   **只挂到 CASE_GLASS 上**：GLASS_MAT 是第二单元与 buildVitrine 共用的，
    给它加 envMap 会连带动到全馆观感（回归风险），所以一个字都不改。 */
 const pmrem = new THREE.PMREMGenerator(renderer);
 /* ⚠️ renderer 这个参数不能省：RoomEnvironment 拿它判断 renderer._useLegacyLights，
@@ -882,7 +1296,7 @@ function buildVitrine(radius, height, baseY) {
 }
 
 /* ============================================================
-   展柜形制表 —— 一物一柜（第三单元 8 个展台）
+   展柜形制表 —— 一物一柜（第二单元 8 个展台）
    本地坐标：X = 切向（柜体长边），+Z = 正对观众（朝八角厅圆心），y 从地面算。
    柜型服从器物：袍 → 低倾角长条立柜 / 花篮 → 八边形地平柜
                 / 盘 → 圆形地平斜柜 / 帛书 → 长条斜面案 / 罐 → 方正立体柜
@@ -1284,10 +1698,10 @@ COLORS.forEach((c, i) => {
   exhibits.push({ c, i, grp, holder, a, x, z, pickRing, spec });
 });
 
-/* 第三单元 8 座展台建完之后再挂标题带：CJK 是 const，声明在第 1202 行，
+/* 第二单元 8 座展台建完之后再挂标题带：CJK 是 const，声明在第 1202 行，
    模块自上而下求值 —— 挂在 785 行的八角墙那段会撞进 CJK 的暂时性死区，
    `${CJK}` 抛 ReferenceError 把整个模块带走（白屏）。展牌一律挂在 CJK 之后。 */
-/* 第三单元标题带 —— 与第一/第二/第四单元同款（5.6×1.2、深底金字、y=3.4）。
+/* 第二单元标题带 —— 与第一/第三/第四单元同款（5.6×1.2、深底金字、y=3.4）。
    八边形的门洞开在**顶点**上（90° 与 270°，即 ±Z 那两个角，各 ±0.13rad≈3.63m 净宽），
    所以只切到相邻的 i=1,2 与 i=5,6 四个面；**完整实墙面有四条**：
    中心角 22.5° / 157.5° / 202.5° / 337.5°（即四条对角面）。取 337.5°（东北对角面）。
@@ -1512,9 +1926,9 @@ exhibits.forEach(loadModel);
    俯视布局（+Z 为南，参观起点在馆外南侧甬道）：
                       ┌───────────────────┐
                       │  第四单元 · 感知   │
-         ┌────────────┤   内厅（第二单元） ├───────────┐
+         ┌────────────┤   内厅（第三单元） ├───────────┐
          │ 第一单元    ├─────────┬──────────┤           │
-         │ 色源·万物生 │ 八角主厅（第三单元）│           │
+         │ 色源·万物生 │ 八角主厅（第二单元）│           │
          └────────────┤        ◉           ├───────────┘
                       ├─────────┴──────────┤
                       │    序厅（入口）     │
@@ -1545,10 +1959,17 @@ function wrapCJK(ctx, text, maxW) {
   }
   return out;
 }
-/* 展板：标题 + 正文 */
+/* 展板：标题 + 正文（+ 可选第二段 body2）
+   ⚠️ 2026-10-15 第 35 轮「长文提高可读性」：
+     · 行高 1.85 → 2.05，空行只走六成 —— 原来 27px 字配 50px 行距，长文眼睛会串行；
+     · 新增 body2 / body2Size / gap：正文之后画一条细分隔线再排第二段（前言要说清「为什么是这八色」）。
+   ⚠️ 同时抓到一个既有缺陷：第一单元展词板（色从哪里来）画布 1400×800 装不下 15 行，
+     末尾「展柜分……三层并列」与「全厅用 3000–4000K……」两行**一直是被裁掉的**。
+     行高放大后更装不下，故把它连画布带板面一起加高（见 3805 一带），别再改回 800。 */
 function textBoardTex(o) {
   const { w = 1024, h = 640, bg = '#efe6d2', fg = '#2f2a1e', title = '', sub = '',
-          body = '', titleSize = 56, bodySize = 29, align = 'left' } = o;
+          body = '', body2 = '', titleSize = 56, bodySize = 29, body2Size = 0,
+          gap = 34, align = 'left' } = o;
   return canvasTex(w, h, (ctx, W, H) => {
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 4; ctx.strokeRect(16, 16, W-32, H-32);
@@ -1570,14 +1991,43 @@ function textBoardTex(o) {
       ctx.beginPath(); ctx.moveTo(56, y + 12); ctx.lineTo(W - 56, y + 12); ctx.stroke();
       y += 34;
     }
-    if (body) {
-      ctx.font = `${bodySize}px ${CJK}`;
-      const lh = Math.round(bodySize * 1.85);
-      wrapCJK(ctx, body, W - 112).forEach(ln => { y += lh; ctx.fillText(ln, x0, y); });
+    const para = (text, size) => {
+      ctx.font = `${size}px ${CJK}`;
+      const lh = Math.round(size * 2.05);
+      for (const ln of wrapCJK(ctx, text, W - 112)) {
+        y += ln ? lh : Math.round(lh * 0.6);      // 空行只走六成，段间距够、又不散
+        if (ln) ctx.fillText(ln, x0, y);
+      }
+      return lh;
+    };
+    if (body) para(body, bodySize);
+    if (body2) {
+      y += Math.round(gap * 0.6);
+      ctx.strokeStyle = 'rgba(90,75,45,0.3)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(56, y + 14); ctx.lineTo(W - 56, y + 14); ctx.stroke();
+      y += gap + 14;
+      para(body2, body2Size || Math.round(bodySize * 0.9));
     }
   });
 }
-/* 门楣/标题带：深底金字，字号自适应 */
+/* 金字渲染（第 35 轮）：深底上的平涂金字偏「飘」，加一层细描边 + 投影才压得住。
+   调用前后 ctx.font / fillStyle 由调用方设好；本函数只负责 strokeText + fillText。
+   ⚠️ shadowBlur / lineWidth / strokeStyle 都是**粘性状态**，会污染后面所有的
+     strokeRect（2541/2543 的细金框就靠它）—— 所以整段包在 save/restore 里，
+     不靠调用方记得复位。 */
+function goldText(ctx, text, x, y, o = {}) {
+  const { stroke = 'rgba(46,32,12,0.92)', lineWidth = 2.4,
+          blur = 7, shadow = 'rgba(0,0,0,0.6)', offsetY = 2.5 } = o;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = lineWidth; ctx.strokeStyle = stroke;
+  ctx.shadowColor = shadow; ctx.shadowBlur = blur; ctx.shadowOffsetY = offsetY;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;    // 填充那一下不要投影，免得糊成双影
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+/* 门楣/标题带：深底金字，字号自适应（金字走 goldText：描边 + 投影） */
 function bandTex(title, sub, W = 1024, H = 220) {
   return canvasTex(W, H, (ctx, w, h) => {
     ctx.fillStyle = '#2a241b'; ctx.fillRect(0, 0, w, h);
@@ -1588,7 +2038,8 @@ function bandTex(title, sub, W = 1024, H = 220) {
     while (ctx.measureText(title).width > w - 80 && fs > 22) {
       fs -= 4; ctx.font = `bold ${fs}px ${CJK}`;
     }
-    ctx.fillText(title, w/2, sub ? 118 : h/2 + fs*0.35);
+    goldText(ctx, title, w/2, sub ? 118 : h/2 + fs*0.35,
+             { lineWidth: Math.max(2.4, fs * 0.045), blur: 8 });
     if (sub) {
       ctx.font = '26px monospace'; ctx.fillStyle = 'rgba(232,207,148,0.6)';
       ctx.fillText(sub, w/2, 172);
@@ -1677,8 +2128,63 @@ function buildPortal(x, z, half, top, h, depth) {
   const l = new THREE.Mesh(new THREE.BoxGeometry(half*2 + jw*2, h - top + 0.02, depth), WOOD_MAT);
   l.position.set(x, (h + top)/2, z);
   g.add(l);
+
+  /* ── 2026-10-15 第 35 轮：门框彩色修饰（润色意见第 3 条「门框修饰」+「门框边缘加一些颜色修饰即可」）
+     原门套只有一块深木色（WOOD_MAT #5c4b34），从甬道看就是个没边的门洞。这里补三样：
+       ① 门柱线脚：每根柱子前后两面各一条**内缘金线** + 一条**外缘石青窄带**；
+       ② 门楣八色带：门洞正上方、门楣下沿压一条八等分色块（取自 COLORS，与色卡墙同款语言），金线收边；
+       ③ 门枕石：两柱脚各一块暖石色块，让门套落地。
+     ⚠️ 三处 buildPortal 的门都在 XY 平面（z = 常数），所以贴面一律朝 ±Z 外移 6mm 防共面闪烁，
+        背面（−Z）再绕 Y 转 π —— plate 那套 FrontSide 单面问题的同款处理。
+     ⚠️ 这些都是**纯装饰网格**：不进 hitboxes（交互只查那个数组，见 4364 一带）、
+        **不新增 blocker、不动 WALK**，可走区与射线命中与改前完全一致。 */
+  const GOLD_LINE = new THREE.MeshBasicMaterial({ color: '#a8853f' });
+  const SHIQING   = new THREE.MeshBasicMaterial({ color: '#1E3C72' });
+  const STONE_MAT = new THREE.MeshStandardMaterial({ color: '#7a6f5c', roughness: 0.95 });
+  const F = 0.006;                                  // 贴面外移量
+  [-1, 1].forEach(sz => {                           // 门的前后两面各铺一套
+    const zz = z + sz * (depth / 2 + F);
+    const flip = sz < 0 ? Math.PI : 0;              // 背面要转过来，否则只画正面、背面看不见
+    [-1, 1].forEach(sx => {
+      const jx = x + sx * (half + jw / 2);
+      const gold = new THREE.Mesh(new THREE.PlaneGeometry(0.045, top - 0.16), GOLD_LINE);
+      gold.position.set(jx + sx * (jw / 2 - 0.055), (top - 0.16) / 2 + 0.08, zz);
+      gold.rotation.y = flip;
+      g.add(gold);
+      const blue = new THREE.Mesh(new THREE.PlaneGeometry(0.06, top - 0.30), SHIQING);
+      blue.position.set(jx - sx * (jw / 2 - 0.05), (top - 0.30) / 2 + 0.15, zz);
+      blue.rotation.y = flip;
+      g.add(blue);
+    });
+    const bandW = half * 2 + 0.42;
+    const band = new THREE.Mesh(new THREE.PlaneGeometry(bandW, 0.20),
+      new THREE.MeshBasicMaterial({ map: portalBandTex() }));
+    band.position.set(x, top - 0.10, zz);
+    band.rotation.y = flip;
+    g.add(band);
+  });
+  [-1, 1].forEach(sx => {                           // 门枕石（只造一次，别放进上面的双面循环去重影）
+    const jx = x + sx * (half + jw / 2);
+    const stone = new THREE.Mesh(new THREE.BoxGeometry(jw + 0.12, 0.16, depth + 0.08), STONE_MAT);
+    stone.position.set(jx, 0.08, z);
+    stone.castShadow = stone.receiveShadow = true;
+    g.add(stone);
+  });
   scene.add(g);
   return g;
+}
+/* 门楣八色带贴图：三处门套共用一张（懒建，避免模块顶层执行 IIFE） */
+let _portalBand = null;
+function portalBandTex() {
+  if (!_portalBand) {
+    _portalBand = canvasTex(2048, 128, (ctx, W, H) => {
+      const bw = W / COLORS.length;
+      COLORS.forEach((c, i) => { ctx.fillStyle = c.hex; ctx.fillRect(i * bw, 0, bw + 1, H); });
+      ctx.strokeStyle = 'rgba(168,133,63,0.95)'; ctx.lineWidth = 9;
+      ctx.strokeRect(4, 4, W - 8, H - 8);
+    });
+  }
+  return _portalBand;
 }
 /* 低斜展牌：短立柱 + 明显后仰的板面（阅览台式，板顶约 0.98m）。
    ⚠️ **板顶必须低于视高**（眼睛 y≈1.70）—— 这是「展牌不挡身后画作」的硬条件：
@@ -1772,7 +2278,7 @@ function specimenMat(hex, seed, glazed) {
 /* 干=干料本色。植物干料**不**用颜料色 —— 真实的苏木是暗红木、槐米是橄榄褐、
    磨出来才有色。这条颜色反差正是「水色」那一层要讲的事：
    ①② 层是干料本色，③ 层才是研出的色粉与染绢。 */
-const DRIED_HEX = { bud:'#8a7a4a', fruit:'#a86a34', chip:'#7a3a30', bundle:'#5f7358' };
+const DRIED_HEX = { bud:'#8a7a4a', fruit:'#a86a34', chip:'#8a4a33', bundle:'#5f7358' };
 const driedMat = (form, seed) => specimenMat(DRIED_HEX[form] || '#8a7a4a', seed, false);
 
 /* ---------- 3. 形制 ----------
@@ -1798,6 +2304,46 @@ function roughRock(r, seed, jag, detail) {
 function seatOnY0(mesh, baseY) {
   mesh.geometry.computeBoundingBox();
   mesh.position.y = baseY - mesh.geometry.boundingBox.min.y;
+}
+/* 赭石：钉头鲕状块（用户文档）—— 鲕 / 豆 / 肾状的**坚硬块体**，不是松散土状。
+   形制拆两件：一枚「头大底收」的扁圆核（收出钉头的颈与足）+ 表面半嵌的鲕粒小球。
+   鲕粒的落点从核自己的顶点里取（同一颗种子的同一批顶点），刷新页面形状不变。 */
+function ooliticChunk(r, seed, mat) {
+  const g = new THREE.Group(), rnd = mulberry32(seed * 17 + 91);
+  const geo = new THREE.IcosahedronGeometry(r, 2);
+  const pos = geo.attributes.position, v = new THREE.Vector3(), s = seed * 0.618;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+    const n = 0.14 * Math.sin(v.x * 3.1 + s) * Math.cos(v.z * 2.7 - s)
+                    * Math.sin(v.y * 2.2 + s * 1.3);
+    /* 头大底收：y<0 的下半横向收进，收出钉头的颈 —— 这是「钉头」与普通圆石的分界 */
+    const k = v.y >= 0 ? 1.0 : 0.56 + 0.44 * (1 + v.y);
+    v.multiplyScalar(r * (1 + n));
+    pos.setXYZ(i, v.x * k, v.y * 0.78, v.z * k);
+  }
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+  const drop = geo.boundingBox.min.y;              // 核的实测最低点（含噪声位移）
+  /* 鲕粒落点**先取好**（此时顶点还是「未坐正」的坐标），再整体坐正 —— 免得两套坐标打架。
+     底部不放鲕粒：既符合「鲕粒长在表面」，也免得有小球探到 y<0 把整块顶起来。 */
+  const beads = [];
+  for (let i = 0; i < 30; i++) {
+    const o = Math.floor(rnd() * pos.count);       // fromBufferAttribute 收的是**顶点号**，不是分量偏移
+    v.fromBufferAttribute(pos, o);
+    if (v.y < r * 0.18) continue;
+    beads.push({ x: v.x, y: v.y - drop, z: v.z, r: r * (0.10 + rnd() * 0.055) });
+  }
+  geo.translate(0, -drop, 0);                      // 核自己坐正到 y=0，直接可用（不再走 liftToY0）
+  const head = new THREE.Mesh(geo, mat);
+  head.castShadow = true;
+  g.add(head);
+  beads.forEach(b => {                             // 鲕粒：半嵌在表面，这一层就是「鲕状」要讲的
+    const s = new THREE.Mesh(new THREE.SphereGeometry(b.r, 8, 6), mat);
+    s.position.set(b.x, b.y, b.z);
+    s.castShadow = true;
+    g.add(s);
+  });
+  return g;                                        // 核已坐正在 y=0，调用方直接摆即可
 }
 /* 植物料 / 树脂料：一小撮细条，按种子散开 */
 function dyePile(r, seed, mat) {
@@ -1864,14 +2410,27 @@ function fruitPods(r, seed, mat) {
   return liftToY0(g);
 }
 /* 苏木：20 片薄木屑乱堆 + 边上一点胭脂碎料（文档：苏木 + 胭脂） */
-function woodChips(r, seed, mat) {
+/* 苏木：**去皮带边材的心材，呈木段 / 木片状**（用户文档）—— 不是木屑。
+   几段横卧的短圆木 + 几片劈开的薄木片，断面朝上看得见木质；边上一点胭脂碎料（文档：苏木 + 胭脂）。 */
+function heartwood(r, seed, mat) {
   const g = new THREE.Group(), rnd = mulberry32(seed * 11 + 29);
-  for (let i = 0; i < 20; i++) {
-    const a = rnd() * Math.PI * 2, rr = r * (0.06 + rnd() * 0.72);
+  for (let i = 0; i < 5; i++) {                          // 木段：横卧的短圆木
+    const a = rnd() * Math.PI * 2, rr = r * (0.10 + rnd() * 0.40);
+    const w = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * (0.075 + rnd() * 0.030), r * (0.070 + rnd() * 0.028),
+                                 r * (0.46 + rnd() * 0.30), 9), mat);
+    w.position.set(Math.cos(a) * rr, r * 0.075, Math.sin(a) * rr);
+    w.rotation.set(Math.PI / 2 + (rnd() - 0.5) * 0.5, rnd() * Math.PI, (rnd() - 0.5) * 0.9);
+    w.castShadow = true;
+    g.add(w);
+  }
+  for (let i = 0; i < 7; i++) {                          // 木片：劈开的薄片，斜倚在木段上
+    const a = rnd() * Math.PI * 2, rr = r * (0.08 + rnd() * 0.56);
     const c = new THREE.Mesh(
-      new THREE.BoxGeometry(r * (0.30 + rnd() * 0.34), r * 0.045, r * (0.14 + rnd() * 0.16)), mat);
-    c.position.set(Math.cos(a) * rr, r * (0.06 + rnd() * 0.34), Math.sin(a) * rr);
-    c.rotation.set((rnd() - 0.5) * 1.5, rnd() * Math.PI, (rnd() - 0.5) * 1.5);
+      new THREE.BoxGeometry(r * (0.34 + rnd() * 0.30), r * (0.055 + rnd() * 0.035),
+                            r * (0.16 + rnd() * 0.14)), mat);
+    c.position.set(Math.cos(a) * rr, r * (0.10 + rnd() * 0.26), Math.sin(a) * rr);
+    c.rotation.set((rnd() - 0.5) * 1.1, rnd() * Math.PI, (rnd() - 0.5) * 1.1);
     c.castShadow = true;
     g.add(c);
   }
@@ -1883,22 +2442,24 @@ function woodChips(r, seed, mat) {
   return liftToY0(g);
 }
 /* 蓼蓝：一束带叶的茎（月白是蓼蓝调浅得来的复合色，属于植物系） */
-function bundle(r, seed, mat) {
+/* 蓼蓝：**叶片为主**（用户文档：靛苷只在叶里，茎不能当染色主体）。
+   十几片长卵形叶散铺，只留三四根极短的嫩茎作陪衬 —— 一眼看去是「叶」，不是「一束草」。 */
+function indigoLeaves(r, seed, mat) {
   const g = new THREE.Group(), rnd = mulberry32(seed * 13 + 7);
-  for (let i = 0; i < 11; i++) {
-    const a = (i / 11) * Math.PI * 2, rr = r * 0.11;
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.030, r * 0.042, r * 1.15, 6), mat);
-    st.position.set(Math.cos(a) * rr, r * 0.58, Math.sin(a) * rr);
-    st.rotation.set((rnd() - 0.5) * 0.34, 0, (rnd() - 0.5) * 0.34);
+  for (let i = 0; i < 4; i++) {                          // 嫩茎：短、细，只作陪衬
+    const a = (i / 4) * Math.PI * 2 + rnd() * 0.6, rr = r * (0.10 + rnd() * 0.22);
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.016, r * 0.022, r * 0.42, 6), mat);
+    st.position.set(Math.cos(a) * rr, r * 0.21, Math.sin(a) * rr);
+    st.rotation.set((rnd() - 0.5) * 0.7, rnd() * Math.PI, (rnd() - 0.5) * 0.7);
     st.castShadow = true;
     g.add(st);
   }
-  for (let i = 0; i < 14; i++) {
-    const a = rnd() * Math.PI * 2, rr = r * (0.14 + rnd() * 0.30);
-    const lf = new THREE.Mesh(new THREE.SphereGeometry(r * (0.15 + rnd() * 0.08), 7, 5), mat);
-    lf.scale.set(1, 0.30, 1.9);
-    lf.position.set(Math.cos(a) * rr, r * (0.10 + rnd() * 0.72), Math.sin(a) * rr);
-    lf.rotation.set(0, rnd() * Math.PI, (rnd() - 0.5) * 0.5);
+  for (let i = 0; i < 16; i++) {                         // 叶：压薄拉长，占绝对主体
+    const lf = new THREE.Mesh(new THREE.SphereGeometry(r * (0.21 + rnd() * 0.07), 8, 6), mat);
+    lf.scale.set(1, 0.16, 1.85);
+    const a = rnd() * Math.PI * 2, rr = r * (0.06 + rnd() * 0.60);
+    lf.position.set(Math.cos(a) * rr, r * (0.030 + rnd() * 0.34), Math.sin(a) * rr);
+    lf.rotation.set((rnd() - 0.5) * 0.50, rnd() * Math.PI, (rnd() - 0.5) * 0.90);
     lf.castShadow = true;
     g.add(lf);
   }
@@ -2054,25 +2615,60 @@ const SILL_Z = 0.33;                                   // 铭牌前檐（平铺�
 
 function caseNameplate(title, sub) {
   const g = new THREE.Group();
-  const tex = canvasTex(1024, 168, (ctx, W, H) => {
+  const tex = canvasTex(1024, 230, (ctx, W, H) => {
     ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = 'rgba(92,78,50,0.5)'; ctx.lineWidth = 3; ctx.strokeRect(8, 8, W - 16, H - 16);
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left'; ctx.fillStyle = '#241f16';
-    ctx.font = `bold 74px ${CJK}`; ctx.fillText(title, 38, 108);
+    ctx.font = `bold 58px ${CJK}`; ctx.fillText(title, 38, 76);
     ctx.textAlign = 'right'; ctx.fillStyle = '#7d6f52';
-    ctx.font = `34px ${CJK}`; ctx.fillText(sub, W - 38, 104);
+    ctx.font = `32px ${CJK}`; ctx.fillText(sub, W - 38, 72);
+    ctx.fillStyle = 'rgba(92,78,50,0.30)'; ctx.fillRect(38, 100, W - 76, 2);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#41392a'; ctx.font = `28px ${CJK}`;
+    ctx.fillText('由高至低　③ 原料 → ② 碎料 → ① 色粉', 38, 150);
+    ctx.fillStyle = '#8a7a5c'; ctx.font = `22px ${CJK}`;
+    ctx.fillText('即：未加工 → 粉碎 → 水飞沉晾成粉', 38, 194);
   });
   const board = new THREE.Group();
-  const back = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.233, 0.012), BRASS_MAT);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.312, 0.012), BRASS_MAT);
   back.position.z = -0.007;
-  const card = new THREE.Mesh(new THREE.PlaneGeometry(1.30, 0.213),
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(1.30, 0.292),
     new THREE.MeshStandardMaterial({ map: tex, roughness: 0.76 }));
   card.castShadow = back.castShadow = true;
   board.add(back, card);
   board.rotation.x = -0.26;                            // 上仰 15°
-  board.position.set(0, 0.60, CASE_D / 2 + 0.03);
+  board.position.set(0, 0.604, CASE_D / 2 + 0.03);
   g.add(board);
+  return g;
+}
+/* 展区导视牌（更新模块第 26 轮）：第一单元三段各一块「门牌」——甲原料 / 乙工艺 / 丙成品。
+   ⚠️ 2026-10-15 第 35 轮：序号由 壹/贰/叁 改 甲/乙/丙 —— 单元本身已简称为「壹 · 色源」，
+   同厅里再出现「壹 原料」会与单元号打架；甲乙丙仍是传统序号，且不与单元号撞。
+   纸色底 + 黄铜背条，与展柜铭牌、工序台铭牌同一族 —— 它是「标牌」不是「展品」，
+   不占展品的位置、不用彩色，不跟八色争主色。牌面 1.90 × 0.348（= canvas 1200×220 的比）。 */
+function zoneSign(no, title, sub) {
+  const g = new THREE.Group();
+  const tex = canvasTex(1200, 220, (ctx, W, H) => {
+    ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(92,78,50,0.5)'; ctx.lineWidth = 3; ctx.strokeRect(8, 8, W - 16, H - 16);
+    ctx.fillStyle = '#312a1e'; ctx.fillRect(34, 44, 132, 132);
+    ctx.strokeStyle = 'rgba(232,207,148,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(43, 53, 114, 114);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#e8cf94'; ctx.font = `bold 76px ${CJK}`;
+    goldText(ctx, no, 100, 112, { lineWidth: 3.4, blur: 6 });   /* 第 35 轮：金字加描边/投影 */
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#241f16'; ctx.font = `bold 58px ${CJK}`;
+    ctx.fillText(title, 206, 112);
+    ctx.fillStyle = '#6d6148'; ctx.font = `27px ${CJK}`;
+    ctx.fillText(sub, 208, 168);
+  });
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.368, 0.012), BRASS_MAT);
+  back.position.z = -0.007;
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(1.90, 0.348),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
+  card.castShadow = back.castShadow = true;
+  g.add(back, card);
   return g;
 }
 
@@ -2088,14 +2684,20 @@ function specimenBay(min, bx, no) {
   let top;
   if (stone) {
     rockG.add(oreMount(0.085));
-    top = new THREE.Mesh(roughRock(0.082, seed, 0.30, 1), matRaw);
-    seatOnY0(top, 0.010);                              // 实测最低点落在托座面上
+    if (min.form === 'oolitic') {
+      /* 赭石：钉头鲕状块（已按实测最低点归零，直接坐在托座面上） */
+      top = ooliticChunk(0.082, seed, matRaw);
+      top.position.y = 0.010;
+    } else {
+      top = new THREE.Mesh(roughRock(0.082, seed, 0.30, 1), matRaw);
+      seatOnY0(top, 0.010);                            // 实测最低点落在托座面上
+    }
   } else {
     /* 干料构造器返回的都是已把最低点归零到 y=0 的 Group，直接坐在台面上 */
     top = { bud   : () => budCluster(0.090, seed, matRaw),
             fruit : () => fruitPods(0.088, seed, matRaw),
-            chip  : () => woodChips(0.090, seed, matRaw),
-            bundle: () => bundle(0.092, seed, matRaw) }[min.form]();
+            chip  : () => heartwood(0.090, seed, matRaw),
+            bundle: () => indigoLeaves(0.092, seed, matRaw) }[min.form]();
     top.position.y += 0.008;
   }
   top.castShadow = true;
@@ -2142,6 +2744,14 @@ function specimenBay(min, bx, no) {
   sp.target.position.set(bx, 0.84, -0.02);
   sp.castShadow = false;
   g.add(sp, sp.target);
+  /* ⑥ 可点选（更新模块第 23 轮）：命中体罩住这个标本位；悬停时玻璃内侧亮起一圈细矩形框。
+     命中体挂在柜的局部坐标里（柜整体 rotation.y = π），不用手算世界坐标。
+     同柜两 bay 相距 0.72、命中体宽 0.68 → 留 0.04 缝；
+     框贴在玻璃内侧（局部 z 0.44，玻璃在 0.45，CASE_GLASS 是 depthWrite:false 不挡它），
+     底边抬到 0.82 —— 清过前檐铭牌的顶边（那牌几乎是平的，顶边只到 0.816），不压字。 */
+  rawHit(g, min.cid + '@bay' + no, min.cid,
+    [0.68, 0.40, 0.72], [bx, 0.95, 0],
+    rawFrame(c.hex, 0.68, 0.32), [bx, 0.98, 0.44]);
   return g;
 }
 
@@ -2201,9 +2811,9 @@ function buildTableCase(title, sub, minA, minB) {
      ③ 沉淀 → 三只玻璃小缸（同一色相的头青/二青/三青）  ④ 晾干 → 竹匾 + 8 色色粉
    台前缘各平放一块小铭牌。全部无彩光、无发光。 */
 const BENCH_H = 0.78, BENCH_W = 0.58;
-function benchLabel(no, title, sub) {
+function benchLabel(no, title, sub, quote, src) {
   const g = new THREE.Group();
-  const tex = canvasTex(520, 200, (ctx, W, H) => {
+  const tex = canvasTex(520, 280, (ctx, W, H) => {
     ctx.fillStyle = '#f3ecdd'; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = 'rgba(92,78,50,0.55)'; ctx.lineWidth = 3; ctx.strokeRect(8, 8, W - 16, H - 16);
     ctx.textBaseline = 'alphabetic';
@@ -2211,16 +2821,29 @@ function benchLabel(no, title, sub) {
     ctx.font = '26px ui-monospace,Consolas,monospace'; ctx.fillText('STEP ' + no, 26, 46);
     ctx.fillStyle = '#241f16'; ctx.font = `bold 46px ${CJK}`; ctx.fillText(title, 26, 108);
     ctx.fillStyle = '#5a5040'; ctx.font = `24px ${CJK}`; ctx.fillText(sub, 26, 158);
+    /* 工艺小铭牌（用户文档）：古籍摘句 + 出处。长句按 468px 折行、最多两行。
+       先设好字体再量宽 —— wrapCJK 是按当前 font 量字的。 */
+    ctx.font = `21px ${CJK}`;
+    const lines = quote ? wrapCJK(ctx, quote, W - 52).slice(0, 2) : [];
+    let y = 204;
+    if (lines.length) {
+      ctx.strokeStyle = 'rgba(92,78,50,0.30)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(26, 180); ctx.lineTo(W - 26, 180); ctx.stroke();
+      ctx.fillStyle = '#3a3226';
+      lines.forEach(ln => { ctx.fillText(ln, 26, y); y += 25; });
+      ctx.fillStyle = '#8a7c5e'; ctx.font = `19px ${CJK}`;
+      ctx.fillText('——' + (src || ''), 26, y + 2);
+    }
   });
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.116, 0.006), BRASS_MAT);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.164, 0.006), BRASS_MAT);
   back.position.z = -0.004;
-  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.29, 0.108),
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.29, 0.1562),
     new THREE.MeshStandardMaterial({ map: tex, roughness: 0.76 }));
   card.castShadow = back.castShadow = true;
   const board = new THREE.Group();
   board.add(back, card);
   board.rotation.x = -1.16;                              // 与罩内铭牌同法：平铺，不挡东西
-  board.position.set(0, 0.030, 0.235);
+  board.position.set(0, 0.034, 0.214);                   // 牌面加到 156mm 后往后挪 21mm，前缘不出台沿
   g.add(board);
   return g;
 }
@@ -2315,7 +2938,7 @@ function bambooTray() {
   return g;
 }
 /* 一座工序台：木台 + 台面 + 道具 + 平铺小铭牌（props 由调用方给，便于四台共用） */
-function processBench(no, title, sub, props) {
+function processBench(no, title, sub, props, quote, src) {
   const g = new THREE.Group();
   const kick = new THREE.Mesh(new THREE.BoxGeometry(BENCH_W - 0.06, 0.06, BENCH_W - 0.06), WOOD_MAT);
   kick.position.y = 0.03; kick.castShadow = kick.receiveShadow = true; g.add(kick);
@@ -2324,7 +2947,7 @@ function processBench(no, title, sub, props) {
   const deck = new THREE.Mesh(new THREE.BoxGeometry(BENCH_W + 0.03, 0.03, BENCH_W + 0.03), CASE_FELT_MAT);
   deck.position.y = BENCH_H - 0.015; deck.castShadow = deck.receiveShadow = true; g.add(deck);
   props.position.set(0, BENCH_H, 0);
-  const lab = benchLabel(no, title, sub);
+  const lab = benchLabel(no, title, sub, quote, src);
   lab.position.y = BENCH_H;                              // 铭牌平铺在台面前缘
   g.add(props, lab);
   /* ⚠️ 这里**不加灯**：本厅已有 10 盏平柜射灯 + 2 盏洗墙灯 + buildRoom 的室内主灯，
@@ -2385,6 +3008,149 @@ function processTex() {
   });
 }
 
+/* ---------- 6.6 原料点选（更新模块第 23 轮）----------
+   第一单元此前是**零可点对象**（全库 userData 只有 'stand' / 'paint' / 'plate' 三类）。
+   本轮把原料墙 24 件 + 成品柜 8 个标本位全部接上**既有**拾取管线
+   （hitboxes → pickAt → setHover → click → showRaw），点开弹同一张「原料卡」——
+   两处其实指向同 8 种原料（石色 4 + 水色 4），点哪个实例弹的都是那一张。
+
+   ⚠️ userData.id 必须唯一：setHover 的去重键是 `kind:(idx ?? id || '')`，
+      不给 id 的话 24 块墙料的键全部退化成 'raw:'，
+      第一次命中之后 hoverKey 就不再变化 → 悬停高亮永远停在第一块上。 */
+const RAW_STEPS = {
+  stone: '采矿 → 选料 → 粉碎 → 水飞 → 沉淀分级 → 晾干成粉',
+  plant: '采料 → 干燥 → 切碎 → 浸煮 → 媒染 → 染绢'
+};
+const RAW_PICKS = [];               // [{ id, ring }]：悬停时按 id 逐个切 visible
+
+/* 悬停高亮：本厅硬性要求「中性白光、无炫彩特效」，所以**不用自发光、不加闪光**，
+   只用一圈细描边（取原料自己的 hex、低不透明度）告诉大家「这件可以点」——
+   与展柜里既有的亚克力小垫是同一套视觉语言。 */
+function rawRing(hex, r) {          // 层板上的细环（平放，套在亚克力小垫外沿）
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(r, r + 0.010, 28),
+    new THREE.MeshBasicMaterial({ color: hex, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.7, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.visible = false;
+  return ring;
+}
+function rawFrame(hex, w, h) {      // 柜内标本位：贴在玻璃内侧的细矩形框（竖着，正对观众）
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: hex,
+    transparent: true, opacity: 0.6, depthWrite: false });
+  const t = 0.014;
+  [[w + t, t, 0,  h / 2], [w + t, t, 0, -h / 2],
+   [t, h,  w / 2, 0],     [t, h, -w / 2, 0]].forEach(([bw, bh, px, py]) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.006), mat);
+    b.position.set(px, py, 0);
+    g.add(b);
+  });
+  g.visible = false;
+  return g;
+}
+/* 造一个不可见命中体挂进 parent（跟着柜体的位移/旋转走，不用手算世界坐标），
+   登记进 hitboxes，再把它的悬停描边登记进 RAW_PICKS。
+   MeshBasicMaterial({visible:false})：Raycaster 只查几何、不看 material.visible
+   —— 同 8 座展台的代理体，见 `const hitboxes` 处的说明。 */
+function rawHit(parent, id, cid, size, pos, ring, ringPos) {
+  const hb = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
+    new THREE.MeshBasicMaterial({ visible: false }));
+  hb.position.set(pos[0], pos[1], pos[2]);
+  hb.userData = { kind: 'raw', id, cid };
+  parent.add(hb);
+  hitboxes.push(hb);
+  if (ring) {
+    ring.position.set(ringPos[0], ringPos[1], ringPos[2]);
+    parent.add(ring);
+    RAW_PICKS.push({ id, ring });
+  }
+  return hb;
+}
+/* 原料卡：复用 #info 的 .sw / .obj / .poem / .open-scroll 既有样式（更新模块第 28 轮为原料图
+   另加了一条 #info .rawimg，其余没动）。
+   showInfo 的两个分支（-2 画作 / COLORS 下标）一个字不动，原料走这条独立函数。 */
+function showRaw(cid) {
+  const min = MINERAL_BY_CID[cid], c = COLOR_BY_ID[cid];
+  if (!min || !c) return;
+  const ci = COLORS.findIndex(x => x.id === cid);
+  info.innerHTML = `
+    <div class="sw"><span class="chip" style="background:${c.hex}"></span>
+      <span><span class="nm serif">${c.name}</span><br>
+      <span class="hex mono">${min.pigment} · ${min.en}</span></span></div>
+    <div class="obj">${IS_STONE(min) ? '石色 · 矿石研磨' : '水色 · 草木浸出'}　｜　原料：${min.mat}</div>
+    <div class="obj">${min.comp}　·　${min.origin}</div>
+    ${min.img ? `<div class="rawimg"><img src="${min.img}" alt="${min.mat} · 原料"><div class="rcap">原料图 · AIGC 生成</div></div>` : ''}
+    <div class="obj">${RAW_STEPS[min.kind]}</div>
+    <div class="poem serif">${min.desc}<br><span class="au">壹 · 原料标本</span></div>
+    <button class="open-scroll">展卷 · 看这个颜色</button>`;
+  info.classList.add('show');
+  /* 图缺了就把整块撤掉、不留白框 —— 与画卷缺图退回占位是同一套「少文件也不难看」的做法 */
+  const ri = info.querySelector('.rawimg img');
+  if (ri) ri.addEventListener('error', () => { const w = ri.closest('.rawimg'); if (w) w.remove(); });
+  const btn = info.querySelector('.open-scroll');
+  if (btn && ci >= 0) btn.addEventListener('click', (ev) => {
+    ev.stopPropagation(); openScroll(ci);
+  });
+}
+
+/* ---------- 6.7 工序台点选（更新模块第 29 轮）----------
+   更新模块第 23 轮把「原料」接上拾取管线（西墙 24 件 + 成品柜 8 个标本位 → 原料卡）；
+   本轮把**北墙四座工序台**接上同一条线（hitboxes → pickAt → setHover → click → showProcess）。
+   工序卡与原料卡同一张 #info 面板、同一套 .sw / .obj / .poem / .au 样式，
+   只多一条 CSS（#info .sw .step）。
+   文案与台前那块小铭牌**同源**：title / sub / quote / src 与 desc / gear 都写在 BENCH_ROW 里，
+   改文案只改一处，牌子与卡片一起变。 */
+const PRO_PICKS = [];               // [{ id, ring }]：悬停时按 id 逐个切 visible
+
+/* 台子四周围的一圈细铜环（平铺在地上，套在台脚外沿）。
+   与原料墙的 rawRing 是同一族「细描边」：不用自发光、不加闪光 ——
+   本厅硬性要求中性白光，可点的提示只靠一圈低不透明度的线。 */
+function proRing(r0) {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(r0, r0 + 0.055, 48),
+    new THREE.MeshBasicMaterial({ color: '#b6934f', side: THREE.DoubleSide,
+      transparent: true, opacity: 0.75, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.visible = false;
+  return ring;
+}
+/* 工序台的命中体：罩住台身（含台脚）+ 台面道具 + 前缘那块平铺小铭牌，
+   观众从南侧走道看在哪儿点都算点在这座台上。
+   挂在台子这个 group 里（台子不旋转，局部坐标即世界偏移），不用手算世界坐标。 */
+function proHit(parent, no, size, pos, ring, ringPos) {
+  const hb = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
+    new THREE.MeshBasicMaterial({ visible: false }));
+  hb.position.set(pos[0], pos[1], pos[2]);
+  hb.userData = { kind: 'process', id: 'p' + no, no };
+  parent.add(hb);
+  hitboxes.push(hb);
+  ring.position.set(ringPos[0], ringPos[1], ringPos[2]);
+  parent.add(ring);
+  PRO_PICKS.push({ id: 'p' + no, ring });
+  return hb;
+}
+/* 工序卡。工序无「色」，所以卡头不用色块、用步骤铜牌；也没有「展卷」按钮 ——
+   工序不指向某一个颜色（硬拉一个色出来反而误导）。要收卡片就点空地（与原料卡同）。 */
+function showProcess(no) {
+  const b = BENCH_ROW[no - 1];
+  if (!b) return;
+  const chain = BENCH_ROW
+    .map(x => x.no === no ? `<b>${x.no} ${x.title}</b>` : `${x.no} ${x.title}`).join(' → ');
+  info.innerHTML = `
+    <div class="sw"><span class="step">${b.no}</span>
+      <span><span class="nm serif">${b.title}</span><br>
+      <span class="hex mono">STEP ${b.no} / ${BENCH_ROW.length} · 壹区 工序台</span></span></div>
+    <div class="obj">${b.sub}</div>
+    <div class="obj">台面道具：${b.gear}</div>
+    <div class="poem serif">${b.desc}</div>
+    <div class="poem serif">「${b.quote}」<br><span class="au">——${b.src}　·　台前小铭牌上就是这一句</span></div>
+    <div class="obj" style="margin-top:10px">本厅四道工序：${chain}</div>`;
+  info.classList.add('show');
+}
+
 /* ---------- 8. 原料墙（西墙）：进门正对的焦点 ----------
    分两段，各 12 件，中间一块铜隔板断开：
      北半「石色 · 矿石」  —— 紧邻北墙的粉碎/水飞工序，原料与工序相邻
@@ -2428,14 +3194,19 @@ function buildSpecimenWall() {
       g.add(pad);
       let it;
       if (stone) {
-        it = new THREE.Mesh(roughRock(r, seed, 0.34, 1), specimenMat(c.hex, seed, false));
-        it.position.set(x, 0, z);
-        seatOnY0(it, topY + 0.006);                    // 坐在亚克力小垫上（垫高 6mm）
+        if (min.form === 'oolitic') {                  // 赭石：钉头鲕状块
+          it = ooliticChunk(r, seed, specimenMat(c.hex, seed, false));
+          it.position.set(x, topY + 0.006, z);         // 坐在亚克力小垫上（垫高 6mm）
+        } else {
+          it = new THREE.Mesh(roughRock(r, seed, 0.34, 1), specimenMat(c.hex, seed, false));
+          it.position.set(x, 0, z);
+          seatOnY0(it, topY + 0.006);
+        }
       } else {
         it = { bud:    () => budCluster(r, seed, driedMat('bud', seed)),
                fruit:  () => fruitPods(r, seed, driedMat('fruit', seed)),
-               chip:   () => woodChips(r, seed, driedMat('chip', seed)),
-               bundle: () => bundle(r, seed, driedMat('bundle', seed)) }[min.form]();
+               chip:   () => heartwood(r, seed, driedMat('chip', seed)),
+               bundle: () => indigoLeaves(r, seed, driedMat('bundle', seed)) }[min.form]();
         it.position.set(x, topY + 0.006, z);
       }
       it.castShadow = true;
@@ -2454,6 +3225,12 @@ function buildSpecimenWall() {
       tag.rotation.set(-Math.PI / 2 + 0.16, 0, Math.PI / 2);   // 平放、长边顺着墙
       tag.position.set(-18.625, topY + 0.005, z);
       g.add(tag);
+      /* 可点选（更新模块第 23 轮）：命中体罩住这一件，悬停时垫外沿亮起一圈细环。
+         命中体 0.21 深、步长 0.2273 → 相邻两件之间留 0.017 缝，不会互相压住。
+         环的半径跟着垫走（r*1.35 = 亚克力小垫半径），大件小件都正好套在外面。 */
+      rawHit(g, c.id + '@wall' + i, c.id,
+        [0.17, 0.20, 0.21], [-18.70, topY + 0.09, z],
+        rawRing(c.hex, r * 1.35), [-18.78, topY + 0.009, z]);
     }
   };
   runSection(STONE_CIDS, 'stone', 18.0);                 // 北半
@@ -2530,14 +3307,19 @@ plate(canvasTex(1024, 220, (ctx, W, H) => {
   ctx.fillStyle = '#1d1a14'; ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = '#a8853f'; ctx.lineWidth = 8; ctx.strokeRect(14, 14, W-28, H-28);
   ctx.fillStyle = '#e8cf94'; ctx.textAlign = 'center';
-  ctx.font = `bold 120px ${CJK}`; ctx.fillText(ASSETS.door.title, W/2, 132);
+  ctx.font = `bold 120px ${CJK}`;
+  goldText(ctx, ASSETS.door.title, W/2, 132, { lineWidth: 5.5, blur: 12, offsetY: 4 });
   ctx.font = '26px monospace'; ctx.fillStyle = 'rgba(232,207,148,0.55)';
   ctx.fillText(ASSETS.door.sub, W/2, 186);
 }), 3.0, 0.64, 0, 3.95, 26.52);   /* z 要落在大门门套外面（门套 z∈[25.55,26.45]），否则被埋进木料里 */
 
-/* 前言展板（你的展词） */
-plate(textBoardTex({ w:1024, h:660, title:ASSETS.foreword.head, body:ASSETS.foreword.body,
-        titleSize:62, bodySize:32, align:'center' }), 2.5, 1.61, -6.26, 1.22, 16.6, Math.PI/2);
+/* 前言展板（你的展词 + 第 35 轮补的「为什么是这八色」）
+   板面 2.50×1.61 → 2.50×3.03、板心 y 1.22 → 2.00（跨度 0.49~3.51）：
+   第二段（8 行）在旧尺寸下根本排不下。底座 fgBase 顶面 0.42，板底 0.49 正好压在底座上。
+   沿 z 仍占 15.35~17.85，与西墙 z∈[19.5,22.5] 的第一单元门洞错开。 */
+plate(textBoardTex({ w:1024, h:1240, title:ASSETS.foreword.head, body:ASSETS.foreword.body,
+        body2:ASSETS.foreword.body2, titleSize:62, bodySize:32, align:'center' }),
+      2.50, 3.03, -6.26, 2.00, 16.6, Math.PI/2);
 const fgBase = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 2.7), WOOD_MAT);
 fgBase.position.set(-6.3, 0.21, 16.6); fgBase.castShadow = fgBase.receiveShadow = true;
 scene.add(fgBase);
@@ -2578,14 +3360,22 @@ const guideTex = canvasTex(760, 700, (ctx, W, H) => {
     ctx.strokeStyle = '#6b5b3c'; ctx.lineWidth = 2;
     ctx.strokeRect(px(x0), py(z0), (x1-x0)*s, (z1-z0)*s);
     if (label) {
-      ctx.fillStyle = '#3a3323'; ctx.font = `bold 21px ${CJK}`;
+      /* 单元名改成单字序（壹 · 色源）后变长，最窄的「肆 · 感知」框只有 101px —— 量宽自适应缩号，
+         从 21px 起降（下限 15px），免得字压到框线上。 */
+      const bw = (x1 - x0) * s - 10;
+      let fs = 21;
+      ctx.font = `bold ${fs}px ${CJK}`;
+      while (ctx.measureText(label).width > bw && fs > 15) {
+        fs -= 1; ctx.font = `bold ${fs}px ${CJK}`;
+      }
+      ctx.fillStyle = '#3a3323';
       ctx.fillText(label, (px(x0)+px(x1))/2, (py(z0)+py(z1))/2 + 8);
     }
   };
-  box(-19, -6.5, 16.5, 25.5, '#e6dcc4', '第一单元');
-  box(-10, 10, -10, 10, '#ded2b6', '第三单元');
-  box(-6.5, 6.5, -26, -14, '#e6dcc4', '第二单元');
-  box(6.5, 18.5, -25.5, -14.5, '#e6dcc4', '第四单元');
+  box(-19, -6.5, 16.5, 25.5, '#e6dcc4', '壹 · 色源');
+  box(-10, 10, -10, 10, '#ded2b6', '贰 · 物色');
+  box(-6.5, 6.5, -26, -14, '#e6dcc4', '叁 · 绘事');
+  box(6.5, 18.5, -25.5, -14.5, '#e6dcc4', '肆 · 感知');
   box(-6.5, 6.5, 14, 26, '#efe3c8', '序厅');
   /* 路线 */
   ctx.strokeStyle = '#b6873a'; ctx.lineWidth = 3; ctx.setLineDash([9, 7]);
@@ -2719,8 +3509,8 @@ const sectionTex = canvasTex(1760, 600, (ctx, W, H) => {
     { x0:  40, x1: 240, tint: '#ece4d0' },   // ① 甬道（室外）
     { x0: 258, x1: 544, tint: '#e8ddc6' },   // ② 序厅
     { x0: 562, x1: 844, tint: '#e4ddc9' },   // ③ 第一单元 · 色源
-    { x0: 862, x1:1180, tint: '#dde2dd' },   // ④ 第三单元 · 物色（八角主厅）
-    { x0:1198, x1:1456, tint: '#e9e1d2' },   // ⑤ 第二单元 · 绘事
+    { x0: 862, x1:1180, tint: '#dde2dd' },   // ④ 第二单元 · 物色（八角主厅）
+    { x0:1198, x1:1456, tint: '#e9e1d2' },   // ⑤ 第三单元 · 绘事
     { x0:1474, x1:1720, tint: '#e2e3da' },   // ⑥ 第四单元 · 感知
   ];
 
@@ -2799,7 +3589,7 @@ const sectionTex = canvasTex(1760, 600, (ctx, W, H) => {
     ctx.restore();
   })();
 
-  /* ---------- ④ 第三单元 · 物色（八角主厅）：八角坡顶 + 8 展台 + 中央信息台 ---------- */
+  /* ---------- ④ 第二单元 · 物色（八角主厅）：八角坡顶 + 8 展台 + 中央信息台 ---------- */
   (() => {
     const h = halls[3], cx = (h.x0 + h.x1) / 2;
     ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
@@ -2830,7 +3620,7 @@ const sectionTex = canvasTex(1760, 600, (ctx, W, H) => {
     ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(cx, RIDGE - 17, 4, 0, Math.PI * 2); ctx.fill();
   })();
 
-  /* ---------- ⑤ 第二单元 · 绘事：墙上金框画 + 画前 8 块小展牌 ---------- */
+  /* ---------- ⑤ 第三单元 · 绘事：墙上金框画 + 画前 8 块小展牌 ---------- */
   (() => {
     const h = halls[4], cx = (h.x0 + h.x1) / 2;
     ctx.save(); ctx.beginPath(); ctx.rect(h.x0 + WT_T, WT, h.x1 - h.x0 - 2 * WT_T, GH); ctx.clip();
@@ -2919,10 +3709,10 @@ const sectionTex = canvasTex(1760, 600, (ctx, W, H) => {
   const cap = [
     { n: 1, name: '甬道',       sub: '起点 · ENTRY' },
     { n: 2, name: '序厅',       sub: '前言长墙 · PROLOGUE' },
-    { n: 3, name: '色源・万物生', sub: '第一单元 · SOURCES' },
-    { n: 4, name: '物色・入人间', sub: '第三单元 · IN LIFE' },
-    { n: 5, name: '绘事・绢上观', sub: '第二单元 · ON SILK' },
-    { n: 6, name: '感知・互动',   sub: '第四单元 · PERCEIVE' },
+    { n: 3, name: '色源・万物生', sub: '壹 · SOURCES' },
+    { n: 4, name: '物色・入人间', sub: '贰 · IN LIFE' },
+    { n: 5, name: '绘事・绢上观', sub: '叁 · ON SILK' },
+    { n: 6, name: '感知・互动',   sub: '肆 · PERCEIVE' },
   ];
   halls.forEach((h, i) => {
     const cx = (h.x0 + h.x1) / 2, c = cap[i];
@@ -2935,11 +3725,32 @@ const sectionTex = canvasTex(1760, 600, (ctx, W, H) => {
 });
 /* ================= 剖面游览图 · 贴序厅北墙西段（单面，法线 +Z 朝南）================= */
 /* 尺寸 3.40 × 1.159、板心 (−4.60, 1.70, 14.15) 的来由、以及「为什么不做成双面」，
-   见上方「剖面游览图」那段长注释。板贴墙、不落地，所以**不加 blocker**。 */
-plate(sectionTex, 3.40, 1.159, -4.60, 1.70, 14.15);
+   见上方「剖面游览图」那段长注释。板贴墙、不落地，所以**不加 blocker**。
+   ── 2026-10-15 第 35 轮：补包边（润色意见第 3 条里的「白方块」就是它）──────────
+   排查结论：门套本身没有任何白色网格（每个 mesh 都有显式材质）。从馆外甬道透过门洞
+   往北看，门洞左侧唯一能露出来的浅色矩形就是这块牌 —— 纸色 #efe6d2、**光板一块、
+   既无边框也无背板**，贴在灰墙上正好读成一个「白方块」。
+   （另一块落地双面「平面导览图」在 z=22.72，从起点望过去被南墙西段整个挡掉，看不见。）
+   处理照「平面导览图」那套：深木色背板 + 黄铜细线脚 + 画心。背板前脸 14.145、
+   画心 14.158，错开 13mm 不共面；连画心一起整体仍不落地、不加 blocker、不进 hitboxes。 */
+const secBack = new THREE.Mesh(new THREE.BoxGeometry(3.72, 1.44, 0.06), WOOD_MAT);
+secBack.position.set(-4.60, 1.70, 14.115);
+secBack.castShadow = secBack.receiveShadow = true;
+scene.add(secBack);
+[-1, 1].forEach(sy => {                                   // 上下两条线脚（y = 1.085 / 2.315）
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(3.60, 0.022, 0.014), BRASS_MAT);
+  bar.position.set(-4.60, 1.70 + sy * 0.615, 14.152);
+  scene.add(bar);
+});
+[-1, 1].forEach(sx => {                                   // 左右两条线脚（x = −6.375 / −2.825）
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.022, 1.32, 0.014), BRASS_MAT);
+  bar.position.set(-4.60 + sx * 1.775, 1.70, 14.152);
+  scene.add(bar);
+});
+plate(sectionTex, 3.40, 1.159, -4.60, 1.70, 14.158);      /* 画心抬到 14.158（原 14.15） */
 
 
-/* ================= 内厅（第二单元 · 绘事・绢上观）================= */
+/* ================= 内厅（第三单元 · 绘事・绢上观）================= */
 buildRoom({ cx:0, cz:-20, w:13, d:12, wall:'#8f8b83', floor:'#c9c2b4', doors:[
   { side:'+z', at:0,   half:1.4, top:3.1 },  // → 八角主厅
   { side:'+x', at:-20, half:1.5, top:3.1 }   // → 第四单元
@@ -3010,7 +3821,7 @@ PLATES.forEach((p, k) => {
   hb.userData.kind = 'plate'; hb.userData.id = p.id;
   scene.add(hb); hitboxes.push(hb);
 });
-/* 内厅标题带：与第一/第四单元同款（5.6×1.2、深底金字、y=3.4），补上第二单元。
+/* 内厅标题带：与第一/第四单元同款（5.6×1.2、深底金字、y=3.4），补上第三单元。
    挂**西墙**：内厅四面里只有西墙是通长 12m 的整面实墙，5.6m 放得下；
    南墙被门洞切剩 4.5m、东墙有门切剩 4.5m、北墙被画心占掉中间 7.2m，都放不下 5.6m。
    x 取 −6.35 = 西墙内表面 −6.39 外 0.04 —— 与 u1 的 (−18.85 / −18.89)、
@@ -3019,22 +3830,24 @@ PLATES.forEach((p, k) => {
       它落在 buildPortal(0, −14.15, …, depth:1.5) 的门楣木盒
       [z −14.9~−13.4, y 3.09~4.61, x −1.9~1.9] **里侧** —— 被木料整个埋住，从来没显示过。
       与序厅匾额「z 必须落在门套 26.45 之外」是同一类坑，当时避开了、这里漏了。
-      大带已标明第二单元，故直接删除，不再补挂（u1/u4 也都没有门楣）。 */
+      大带已标明第三单元，故直接删除，不再补挂（u1/u4 也都没有门楣）。 */
 plate(textBoardTex({ w:1024, h:220, bg:'#2a241b', fg:'#e8cf94', title:UNITS.u2.cn,
   sub:UNITS.u2.en, titleSize:60, align:'center' }),
   5.6, 1.2, -6.35, 3.4, -20, Math.PI/2);       /* 西墙（内表面 x=−6.39），面朝 +X */
 /* ================= 辅助展板（内厅西墙）· 古色之用 =================
-   板面 2.4×1.71 m，画布 1200×855（1200:855 = 2.4:1.71，比例锁死才不会把字拉变形）。
-   板心 (-6.2, 1.275, -20)，rotY=π/2 → 法线 +X，面朝厅内；底沿 1.275−0.855 = 0.42，
+   板面 2.4×1.86 m，画布 1200×930（1200:930 = 2.4:1.86，比例锁死才不会把字拉变形）。
+   板心 (-6.2, 1.35, -20)，rotY=π/2 → 法线 +X，面朝厅内；底沿 1.35−0.93 = 0.42，
    正好坐回底座顶面 0.42（底座 BoxGeometry(0.3,0.42,2.5) @(-6.24,0.21,-20)，
-   z∈[-21.25,-18.75] 包住板宽 2.4 的 z∈[-21.2,-18.8]）。
+   z∈[-21.25,-18.75] 包住板宽 2.4 的 z∈[-21.2,-18.8]）。板顶 2.28，墙高 4.6。
    配色/构图沿用 textBoardTex（纸底 #efe6d2、正文 #2f2a1e、4px 外框内缩 16）；
    五则「序号+小标题」用金褐 #8a6a2f 粗体，正文常规体，则间留半个行高；落款前再一条分隔线。
-   ⚠️ 正文 25px / 行高 45 / 则间 19 这三个数是按「五则共 10 行、底部留白 34px」选定的；
+   ⚠️ 正文 25px / 行高 50 / 则间 28 这三个数是按「五则共 10 行」选定的（第 35 轮从 45/19 放宽，
+      为的是长文可读性）；画布高 855 → 930、板面高 1.71 → 1.86 是同一步加出来的。
       改文案字数（尤其第二则最长）要回头重算，否则落款会顶出外框。
    ⚠️ 跨字体换行：正文含全角汉字与全角标点，主流 CJK 字体每字 1em，本机与 macOS 结果应一致；
-      但代码没做「两遍测量自适应」，若某字体把某则挤成 3 行（共 11 行），落款会下移约 45px。 */
-plate(canvasTex(1200, 855, (ctx, W, H) => {
+      但代码没做「两遍测量自适应」，若某字体把某则挤成 3 行（共 11 行），落款会下移约 50px。
+      第 35 轮量过：五则各 2 行；最长的第二则 84 字，两行容量 2×1088/25 = 87 字，余 3 字。 */
+plate(canvasTex(1200, 930, (ctx, W, H) => {
   const BG = '#efe6d2', INK = '#2f2a1e', ACCENT = '#8a6a2f';
   /* 行首禁则：中文标点（，。、；：！？）】》」』〉”’%）不得落在行首 ——
      wrapCJK 是纯贪心断行、不管这个，所以把上一行末字拉下来陪标点（两行总字数不变）。 */
@@ -3064,10 +3877,10 @@ plate(canvasTex(1200, 855, (ctx, W, H) => {
   ctx.beginPath(); ctx.moveTo(x0, 146); ctx.lineTo(W - x0, 146); ctx.stroke();
 
   /* —— 正文五则：整段连续排，「序号＋小标题」金褐粗体，其余墨色常规体 —— */
-  const bodySize = 25, lh = 45, gap = 19;
+  const bodySize = 25, lh = 50, gap = 28;      /* 第 35 轮：45/19 → 50/28，长文松开 */
   const secs = [
     { h: '一　随类赋彩　', b: '「六法」之一。中国画不摹物象的固有色，而依物之「类」定色：宫瓦用石青，远山用黛蓝，仕女内衬用月白。取的是概念之色，故历久而不失其雅。' },
-    { h: '二　石色与水色　', b: '矿物色（石青、石绿、赭石）厚重不透明，须先以淡墨或水色打底、再逐层薄罩；植物色（花青、藤黄）清透易渗，多用于罩染以调冷暖。本馆第一单元即按这两条工序线陈列。' },
+    { h: '二　石色与水色　', b: '矿物色（石青、石绿、赭石）厚重不透明，须先以淡墨或水色打底、再逐层薄罩；植物色（花青、藤黄）清透易渗，多用于罩染以调冷暖。本馆壹区即按这两条工序线陈列。' },
     { h: '三　墨分五色　', b: '张彦远《历代名画记》谓「运墨而五色具」：焦、浓、重、淡、清。墨本身即是一色，与彩色相济而不相碍。' },
     { h: '四　色随月变　', b: '正月梅、二月柳、六月荷、九月菊、十二月雪：同一座宫苑，十二个月各有其色。此册逐月设色，本身就是一部按月编排的色谱。' },
     { h: '五　雅称即审美　', b: '「月白」取月华之轻，「霁蓝」取雨霁初晴，「松花」取松树花粉，「藕合」取藕心之色。古人以自然物象名色：名之成，即美之成。' },
@@ -3100,7 +3913,7 @@ plate(canvasTex(1200, 855, (ctx, W, H) => {
    '清 · 陈枚　绢本设色　乾隆三年（1738）',
    '每开纵 37、横 31.8 厘米　故宫博物院藏'].forEach(t => { ctx.fillText(t, x0, fy); fy += 34; });
   ctx.globalAlpha = 1;
-}), 2.4, 1.71, -6.2, 1.275, -20, Math.PI/2);
+}), 2.4, 1.86, -6.2, 1.35, -20, Math.PI/2);
 const auxBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 2.5), WOOD_MAT);
 auxBase.position.set(-6.24, 0.21, -20); auxBase.castShadow = auxBase.receiveShadow = true;
 scene.add(auxBase);
@@ -3121,23 +3934,63 @@ buildSpecimenWall();
 
 /* —— 北墙：工序台 + 流程图（左端保留展词板） ——
    台沿北墙排开，观众沿墙走一遍就看完整个加工过程。 */
-plate(textBoardTex({ w:1400, h:800, title:'色从哪里来', sub:'SOURCES · 矿物与草木',
+plate(textBoardTex({ w:1400, h:1000, title:'色从哪里来', sub:'SOURCES · 矿物与草木',
   body:ASSETS.u1.note, titleSize:56, bodySize:27, align:'left' }),
-  4.2, 2.4, -16.40, 1.75, 16.66, 0);
+  4.2, 3.0, -16.40, 1.90, 16.66, 0);      /* 1400×1000：15 行正文行距放大后要 926 高，800 会裁尾（见 textBoardTex 注） */
 plate(processTex(), 4.6, 2.4, -10.87, 2.30, 16.66, 0);   /* 流程图挂在工序台正上方做总览 */
 
+/* —— 三段各一块导视牌（更新模块第 26 轮）：进门就能分出「原料 / 工艺 / 成品」——
+   壹 贴西墙、压在本单元标题带之下、原料墙之上（2.13~2.47，上不撞 2.80、下不撞铜牌 1.81）；
+   贰 挂在流程图正上方（3.79~4.12，流程图顶 3.50、墙高 4.6），与下头的四座工序台对齐；
+   叁 贴南墙、居中压在四座展柜上方（柜罩顶 1.17）。三块都不在走道上，不动 blockers。 */
+const zoneRaw = zoneSign('甲', '原 料', '石色取矿石 · 水色取草木 —— 先认料，再谈工');
+zoneRaw.position.set(-18.85, 2.30, 21);   zoneRaw.rotation.y = Math.PI / 2;
+const zonePro = zoneSign('乙', '工 艺', '粉碎 · 水飞 · 沉淀分级 · 晾干成粉，四道工序');
+zonePro.position.set(-10.87, 3.96, 16.66);
+const zoneFin = zoneSign('丙', '成 品', '同一味料，粗细分出深浅 —— 每柜两色、每色三层');
+zoneFin.position.set(-12.675, 2.36, 25.36); zoneFin.rotation.y = Math.PI;
+scene.add(zoneRaw, zonePro, zoneFin);
+
+/* gear / desc 是更新模块第 29 轮点选时加的：台前小铭牌（0.29×0.156m）上放不下这些，
+   收在工序卡里 —— 牌面给「一句引文」，卡片补「这是什么、为什么这么做」。 */
 const BENCH_ROW = [
-  { x:-12.90, no:1, title:'粉碎', sub:'石臼捣碎，粗砂成粒', props:() => mortar() },
-  { x:-11.55, no:2, title:'水飞', sub:'水中研磨漂洗去土', props:() => washBasin() },
+  { x:-12.90, no:1, title:'粉碎', sub:'石臼捣碎，粗砂成粒',
+    gear:'石臼与杵 —— 臼口里还留着几块没捣完的原矿',
+    desc:'石色取自矿石，进臼前是一整块硬石。捣碎是加工的头一道：块料捣成粗砂，才下得了水盆。'
+       + '《天工开物》说的「轧碎如微尘，然后入缸」就是这个次序 —— 碎得够细，才经得起后头一遍遍漂澄。',
+    quote:'轧碎如微尘', src:'《天工开物》', props:() => mortar() },
+  { x:-11.55, no:2, title:'水飞', sub:'研磨漂洗，借比重淘澄粗细',
+    gear:'粗陶盆、盆里的水、一方研石',
+    desc:'水飞法：矿石捣碎研细，入水搅荡，静置分层，借比重淘澄粗细，弃粗留细，阴干收色。'
+       + '水在这里既是研磨的介质，也是分级的手段 —— 颗粒越粗沉得越快，越细漂得越久。'
+       + '石色走这道，草木水色不走（水色靠浸煮与媒染，见西墙南半的水色段）。',
+    quote:'然后入缸，注清水澄浸。过三日夜，跌取其上浮者。', src:'《天工开物》',
+    props:() => washBasin() },
   { x:-10.20, no:3, title:'沉淀分级', sub:'静置分层，头青二青三青',
+    gear:'三只玻璃小缸 —— 澄的是石青，三缸一个色相、深浅不同',
+    desc:'水飞之后的静置，才是把「一块石头」分成几种颜色的那一步：底层粗粒为头青，'
+       + '依次上澄为二青、三青；上浮极细淡青为四青（青华）。颗粒由粗至细，色由深转浅 ——'
+       + '三只缸里装的其实是同一味料，画上用青时也就有了由深到浅的几档可选。',
+    quote:'倾入瓷盏，略加清水搅匀，置少顷，将上面粉者撇起，谓之油子。', src:'《芥子园画传》',
     props:() => settleJars(COLOR_BY_ID['shiqing'].hex) },
-  { x: -8.85, no:4, title:'晾干成粉', sub:'八色收贮，可调胶上绢', props:() => bambooTray() }
+  { x: -8.85, no:4, title:'晾干成粉', sub:'阴干收色，可调胶上绢',
+    gear:'竹匾与匾里的八色色粉 —— 从西墙的料、北墙的工走到这里，八色各收成一堆',
+    desc:'澄好的颜料倒进竹匾里阴干收色，干后收贮 —— 到这一步，石头才算真正成了「粉」。'
+       + '用的时候以胶调和上绢：粗石青胶宜稠，细粉胶宜薄；胶过量则画面发暗、易脆脱。'
+       + '匾里摆的是本厅八色，这一台正好是绕厅一圈的收束点。',
+    quote:'用时，胶水须稠，火上熔用。', src:'《绘事琐言 · 石青》', props:() => bambooTray() }
 ];
 BENCH_ROW.forEach(b => {
-  const bn = processBench(b.no, b.title, b.sub, b.props());
+  const bn = processBench(b.no, b.title, b.sub, b.props(), b.quote, b.src);
   bn.position.set(b.x, 0, 17.05);
   /* 局部 +Z 朝观众：台面朝南（观众从南侧走道看过来） */
   scene.add(bn);
+  /* 更新模块第 29 轮：整座台子可点开「工序卡」。命中体 [0.62, 1.06, 0.68] 罩住台身 + 台面道具 + 前缘铭牌
+     （顶到 1.06：① 台的杵斜倚着，尖儿比别的道具都高一点，定在 1.06 就把它收进来了；
+      再高就要碰到流程图展板的下缘 1.10 了 —— 那条线是上限）。
+     悬停环内径 0.60 套在台脚外（台脚 0.52 见方），外径 0.655 ——
+     相邻两台中心距 1.35，两环不碰（0.655×2 = 1.31 < 1.35），不会连成一条。 */
+  proHit(bn, b.no, [0.62, 1.06, 0.68], [0, 0.53, 0.02], proRing(0.60), [0, 0.028, 0]);
   /* 走道：4 个圆把观众挡在台沿外 0.35m，中部走道仍有 17.67…23.64 ≈ 6.0m */
   blockers.push({ x: b.x, z: 17.05, r: 0.62 });
 });
@@ -3170,30 +4023,62 @@ buildRoom({ cx:12.5, cz:-20, w:12, d:11, wall:'#8d8a83', floor:'#c8c2b6', omit:[
 plate(textBoardTex({ w:1024, h:220, bg:'#2a241b', fg:'#e8cf94', title:UNITS.u4.cn,
   sub:UNITS.u4.en, titleSize:60, align:'center' }),
   5.6, 1.2, 18.35, 3.4, -20, -Math.PI/2);
-/* 色卡墙 */
-plate(canvasTex(1600, 620, (ctx, W, H) => {
+/* ---------- 色卡墙（北墙）：8 主色在上、补录七色在下 ----------
+   ⚠️ 两张墙都走序厅 proWallTex 那套「具名 canvas + CanvasTexture + drawX()」：
+   重绘只重画 canvas 再 tex.needsUpdate = true，**不重建 mesh、不换 material.map**。
+   ⚠️ canvas 纵横比必须等于 plate 的 pw/ph，否则贴图被拉伸：
+      2000/775 = 9.6/3.72 ｜ 1680/1000 = 4.20/2.50 */
+const cardWallCanvas = document.createElement('canvas');
+cardWallCanvas.width = 2000; cardWallCanvas.height = 775;
+const cardWallTex = new THREE.CanvasTexture(cardWallCanvas);
+cardWallTex.colorSpace = THREE.SRGBColorSpace; cardWallTex.anisotropy = 4;
+plate(cardWallTex, 9.6, 3.72, 12.5, 2.1, -25.36);
+
+function drawCardWall() {
+  const ctx = cardWallCanvas.getContext('2d'), W = 2000, H = 775;
   ctx.fillStyle = '#efe6d2'; ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 4; ctx.strokeRect(14, 14, W-28, H-28);
-  ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'center';
-  ctx.font = `bold 50px ${CJK}`; ctx.fillText('色 卡 墙', W/2, 76);
-  const bw = 168, gap = 14, x0 = (W - (bw*8 + gap*7)) / 2;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#2f2a1e'; ctx.font = `bold 46px ${CJK}`;
+  ctx.fillText('色 卡 墙', W/2, 62);
+  ctx.strokeStyle = 'rgba(90,75,45,0.3)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(90, 88); ctx.lineTo(W-90, 88); ctx.stroke();
+
+  /* 上半：本馆八色，占去画面 3/4 —— 主角位置不动 */
+  const bw = 210, gap = 18, x0 = (W - (bw*8 + gap*7)) / 2;
   COLORS.forEach((c, i) => {
     const x = x0 + i * (bw + gap);
-    ctx.fillStyle = c.hex; ctx.fillRect(x, 104, bw, 300);
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.strokeRect(x, 104, bw, 300);
+    ctx.fillStyle = c.hex; ctx.fillRect(x, 112, bw, 300);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.strokeRect(x, 112, bw, 300);
     ctx.fillStyle = '#3a3323'; ctx.font = `bold 36px ${CJK}`;
-    ctx.fillText(c.name, x + bw/2, 452);
+    ctx.fillText(c.name, x + bw/2, 456);
     ctx.fillStyle = '#7c735c'; ctx.font = '22px monospace';
-    ctx.fillText(c.hex, x + bw/2, 486);
+    ctx.fillText(c.hex, x + bw/2, 490);
   });
-  ctx.fillStyle = '#8a7d63'; ctx.font = `26px ${CJK}`;
-  ctx.fillText('其余传统色卡待录入 —— 观众可在此对照辨认', W/2, 566);
-  ctx.strokeStyle = 'rgba(120,105,75,0.28)'; ctx.lineWidth = 2;
-  for (let r = 0; r < 2; r++) for (let i = 0; i < 16; i++) {
-    ctx.strokeRect(x0 + i*110, 516 + r*22, 100, 16);
-  }
-}), 9.6, 3.72, 12.5, 2.1, -25.36);
-/* 互动屏 */
+
+  /* 下半：补录七色 —— 只有主色块约 1/10 的面积，明确是「续」不是「主角」 */
+  ctx.strokeStyle = 'rgba(120,105,75,0.35)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(90, 520); ctx.lineTo(W-90, 520); ctx.stroke();
+  ctx.fillStyle = '#7c6a4c'; ctx.font = `26px ${CJK}`;
+  ctx.fillText('其余传统色 · 补录', W/2, 552);
+  ctx.fillStyle = 'rgba(124,106,76,0.72)'; ctx.font = `15px ${CJK}`;
+  ctx.fillText('非本馆八色体系 · 色值为通用色谱近似值，非文物取样', W/2, 576);
+
+  const cw = 70, colw = 268, cx0 = (W - colw * 7) / 2;
+  EXTRA_COLORS.forEach((c, i) => {
+    const colx = cx0 + i * colw, x = colx + (colw - cw) / 2;
+    ctx.fillStyle = c.hex; ctx.fillRect(x, 592, cw, cw);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.strokeRect(x, 592, cw, cw);
+    ctx.fillStyle = '#3a3323'; ctx.font = `bold 23px ${CJK}`;
+    ctx.fillText(c.name, colx + colw/2, 688);
+    ctx.fillStyle = '#8a7d63'; ctx.font = `15px ${CJK}`;
+    let y = 710;
+    wrapCJK(ctx, c.brief, colw - 22).slice(0, 3).forEach(ln => { ctx.fillText(ln, colx + colw/2, y); y += 21; });
+  });
+  cardWallTex.needsUpdate = true;
+}
+
+/* ---------- 互动屏（南墙）：正文是「哪三块板点得动」的引导 ---------- */
 plate(canvasTex(1024, 630, (ctx, W, H) => {
   ctx.fillStyle = '#0e1116'; ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = '#2b3a48'; ctx.lineWidth = 6; ctx.strokeRect(14, 14, W-28, H-28);
@@ -3203,24 +4088,155 @@ plate(canvasTex(1024, 630, (ctx, W, H) => {
   let y = 330;
   wrapCJK(ctx, ASSETS.u4.note, W - 160).forEach(ln => { ctx.fillText(ln, W/2, y); y += 50; });
 }), 2.6, 1.6, 10.6, 1.85, -14.64, Math.PI);
-/* 留言墙 */
-plate(canvasTex(1400, 700, (ctx, W, H) => {
-  ctx.fillStyle = '#e8dcc2'; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = 'rgba(90,75,45,0.45)'; ctx.lineWidth = 5; ctx.strokeRect(18, 18, W-36, H-36);
-  ctx.fillStyle = '#2f2a1e'; ctx.textAlign = 'center';
-  ctx.font = `bold 56px ${CJK}`; ctx.fillText('留 言 墙', W/2, 104);
-  ctx.font = `30px ${CJK}`; ctx.fillStyle = '#6d6148';
-  ctx.fillText('收尾结语 · 观众留言〔待置入〕', W/2, 168);
-  const notes = ['#f2e6b8','#e7d3c0','#d8e2c4','#e3d5e6','#f0dcc2','#d7e0e8'];
-  for (let i = 0; i < 12; i++) {
-    const cx = 150 + (i % 4) * 300, cy = 260 + Math.floor(i / 4) * 140;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(((i * 37) % 11 - 5) * Math.PI / 180);
-    ctx.fillStyle = notes[i % notes.length];
-    ctx.fillRect(-95, -55, 190, 110);
-    ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.lineWidth = 2; ctx.strokeRect(-95, -55, 190, 110);
-    ctx.restore();
+
+/* ---------- 留言墙（南墙）：结语 + 观众题跋（真存真画） ----------
+   更新模块第 26 轮按用户要求改版，四件事一起做：
+     · 更明显 —— 墙体从 3.4×1.7m 放大到 4.20×2.50m，标题加大，便签本身也放大（260×160）；
+     · 错落随机 —— 不再排成 4×3 的行列，改成按 id 随机取样、挑最空的一处落（见下）；
+     · 远近分层 —— 每条按**新旧**决定大小、浓淡与投影，旧的压在下层、新的浮在最外层；
+     · 时序感 —— 便签左下留款（昵称或「匿名」）、右下盖一方朱印，像题跋一层层落上去。
+   位置由 strSeed(id) 派生 —— 同一批留言每次都是同一面墙，刷新不会乱跳（不许 Math.random，项目硬规矩）。
+   ⚠️ canvas 纵横比 1680/1000 必须对上 plate 的 4.20/2.50，否则贴图被拉伸。 */
+const BOARD_W = 1680, BOARD_H = 1000;
+/* ⚠️ 便签区左上角原名 BOARD_X0 / BOARD_Y0，与本文件 2071 行内厅低斜展牌的
+   `const BOARD_Y0 = 0.43`（板面下沿高度）**撞名** —— 模块顶层重名声明会整页白屏。
+   按便签那组（NOTE_HW / NOTE_HH）改名，两族就此分开。 */
+const NOTE_X0 = 50, NOTE_Y0 = 300;                       // 便签区左上角（抬头与结语让出上面 300px）
+const NOTE_HW = 130, NOTE_HH = 80;                       // 便签局部半宽半高（260 × 160）
+const WALL_PAPER = '#e8dcc2';
+
+const boardWallCanvas = document.createElement('canvas');
+boardWallCanvas.width = BOARD_W; boardWallCanvas.height = BOARD_H;
+const boardWallTex = new THREE.CanvasTexture(boardWallCanvas);
+boardWallTex.colorSpace = THREE.SRGBColorSpace; boardWallTex.anisotropy = 4;
+plate(boardWallTex, 4.20, 2.50, 15.4, 2.05, -14.64, Math.PI);
+
+/* 把纸色往墙色里兑 —— 兑得越多越像被年月晒退（旧留言兑得多，所以「越旧越灰」） */
+function mixHex(a, b, t) {
+  const px = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const A = px(a), B = px(b), c = i => Math.round(A[i] + (B[i] - A[i]) * t);
+  return 'rgb(' + c(0) + ',' + c(1) + ',' + c(2) + ')';
+}
+
+function drawBoardWall() {
+  const ctx = boardWallCanvas.getContext('2d'), W = BOARD_W, H = BOARD_H;
+  ctx.fillStyle = WALL_PAPER; ctx.fillRect(0, 0, W, H);
+  /* 老墙的斑驳：极淡的竖向刷痕。固定种子 —— 是「刷痕」不是噪点，刷新不变。 */
+  const wr = mulberry32(20261014);
+  ctx.fillStyle = 'rgba(120,102,68,0.035)';
+  for (let i = 0; i < 26; i++) ctx.fillRect(wr() * W, 0, 24 + wr() * 90, H);
+  ctx.strokeStyle = 'rgba(90,75,45,0.5)'; ctx.lineWidth = 6; ctx.strokeRect(20, 20, W - 40, H - 40);
+  /* 抬头 + 结语（结语与互动区第 ④ 页共用 ASSETS.u4.closing 同一份文本） */
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#241f16'; ctx.font = `bold 72px ${CJK}`;
+  ctx.fillText('留 言 墙', W / 2, 96);
+  ctx.fillStyle = 'rgba(120,102,68,0.6)'; ctx.fillRect(W / 2 - 200, 116, 400, 3);
+  ctx.fillStyle = '#6d6148'; ctx.font = `20px ${CJK}`;
+  /* 结语全文 6 行太长，墙上只题收尾那 4 行 —— 末句正落在「你写下的那句话，会和别人的字一起挂在墙上」 */
+  let y = 152;
+  wrapCJK(ctx, ASSETS.u4.closing, W - 320).slice(-4)
+    .forEach(ln => { ctx.fillText(ln, W / 2, y); y += 30; });
+  ctx.fillStyle = 'rgba(109,97,72,0.78)'; ctx.font = `19px ${CJK}`;
+  ctx.fillText('—— 可署名，可匿名；写得下的都会挂上来 ——', W / 2, y + 6);
+
+  const list = lsGetNotes().slice(0, 12);                 // 最新的在前
+  if (!list.length) {
+    ctx.fillStyle = 'rgba(109,97,72,0.6)'; ctx.font = `28px ${CJK}`;
+    ctx.fillText('（还没有留言 —— 走到互动区写一句，它会出现在这里）', W / 2, 580);
+    boardWallTex.needsUpdate = true;
+    return;
   }
-}), 3.4, 1.7, 15.4, 1.8, -14.64, Math.PI);
+  /* 位置不是行列网格 —— 「随机取样 + 挑最空的一处」：
+     每张纸先按 id 派生的随机序列试 28 个落点，取与已落下的便签压得最轻的那个，够松就收。
+     大张的先落（大纸难找地方），画的时候再按时间从旧到新一层层叠上去。
+     全部由 id 与新旧序派生 —— 同一批留言每次都是同一面墙，刷新不会乱跳（不许 Math.random）。 */
+  const chron = list.slice().reverse();                    // 旧 → 新
+  const n = chron.length;
+  const items = chron.map((note, seq) => {
+    const rank = n > 1 ? seq / (n - 1) : 1;                // 0 = 最旧，1 = 最新
+    const seed = strSeed(note.id), rnd = mulberry32(seed);
+    const s = (0.74 + 0.32 * rank) * (0.90 + rnd() * 0.14); // 越新越大
+    const rot = (rnd() * 2 - 1) * 10 * Math.PI / 180;       // 各自歪 ±10°
+    const sn = Math.abs(Math.sin(rot)), cs = Math.cos(rot);
+    return { note, seq, rank, seed, s, rot,
+             bw: (NOTE_HW * cs + NOTE_HH * sn) * s,          // 斜纸的外接框
+             bh: (NOTE_HW * sn + NOTE_HH * cs) * s };
+  });
+  /* 两张斜纸的外接框压掉多少（按较小那张的面积算，1 = 全覆盖） */
+  const overlap = (a, b) => {
+    const ox = Math.max(0, Math.min(a.x + a.bw, b.x + b.bw) - Math.max(a.x - a.bw, b.x - b.bw));
+    const oy = Math.max(0, Math.min(a.y + a.bh, b.y + b.bh) - Math.max(a.y - a.bh, b.y - b.bh));
+    return ox * oy / (4 * Math.min(a.bw * a.bh, b.bw * b.bh));
+  };
+  const spot = { x: 0, y: 0, bw: 0, bh: 0 };
+  const placed = [];
+  items.slice().sort((a, b) => b.s - a.s || a.seq - b.seq).forEach(it => {
+    const rnd = mulberry32(it.seed ^ 0x9e3779b9);
+    let best = Infinity;
+    for (let k = 0; k < 28; k++) {
+      const px = NOTE_X0 + it.bw + rnd() * (BOARD_W - 100 - 2 * it.bw);
+      const py = NOTE_Y0 + it.bh + rnd() * (BOARD_H - NOTE_Y0 - 40 - 2 * it.bh);
+      spot.x = px; spot.y = py; spot.bw = it.bw; spot.bh = it.bh;
+      let ov = 0;
+      for (const q of placed) { const o = overlap(spot, q); if (o > ov) ov = o; }
+      if (ov < best) { best = ov; it.x = px; it.y = py; }
+      if (ov <= 0.10) break;                                // 压得够轻就不再找了
+    }
+    placed.push({ x: it.x, y: it.y, bw: it.bw, bh: it.bh });
+  });
+  items.forEach(it => {
+    const note = it.note, rank = it.rank, s = it.s, seed = it.seed;
+    ctx.save();
+    ctx.globalAlpha = 0.62 + 0.38 * rank;                    // 越旧越淡
+    ctx.translate(it.x, it.y); ctx.rotate(it.rot); ctx.scale(s, s);
+    /* 投影：越新越重 —— 「远近分层」主要靠它 */
+    ctx.fillStyle = 'rgba(46,37,22,' + (0.05 + 0.20 * rank).toFixed(3) + ')';
+    ctx.fillRect(-NOTE_HW + 4, -NOTE_HH + 5, NOTE_HW * 2, NOTE_HH * 2);
+    /* 纸：越旧越往墙色里退 */
+    ctx.fillStyle = mixHex(NOTE_PAPER[seed % NOTE_PAPER.length], WALL_PAPER, (1 - rank) * 0.55);
+    ctx.fillRect(-NOTE_HW, -NOTE_HH, NOTE_HW * 2, NOTE_HH * 2);
+    ctx.strokeStyle = 'rgba(92,78,50,' + (0.20 + 0.32 * rank).toFixed(3) + ')';
+    ctx.lineWidth = 1.6; ctx.strokeRect(-NOTE_HW, -NOTE_HH, NOTE_HW * 2, NOTE_HH * 2);
+    /* 正文：最多 4 行 × 10 字 = 40 字，正好是 NOTE_LEN 的上限 */
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#332c1d'; ctx.font = `20px ${CJK}`;
+    let ly = -NOTE_HH + 30;
+    wrapCJK(ctx, note.text, NOTE_HW * 2 - 44).slice(0, 4)
+      .forEach(ln => { ctx.fillText(ln, -NOTE_HW + 20, ly); ly += 27; });
+    /* 款（昵称 / 匿名）在左下、日期在其右、朱印在右下 —— 一行占满便签下沿 */
+    ctx.fillStyle = '#5b5038'; ctx.font = `15px ${CJK}`;
+    ctx.fillText('—— ' + (note.who || '匿名'), -NOTE_HW + 20, NOTE_HH - 20);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(91,80,56,0.78)'; ctx.font = `13px ${CJK}`;
+    ctx.fillText(noteDay(note.t), NOTE_HW - 38, NOTE_HH - 20);
+    ctx.fillStyle = 'rgba(150,44,36,0.85)';                  // 朱印
+    ctx.fillRect(NOTE_HW - 30, NOTE_HH - 34, 22, 22);
+    ctx.strokeStyle = 'rgba(242,232,206,0.85)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(NOTE_HW - 27, NOTE_HH - 31, 16, 16);
+    ctx.restore();
+  });
+  boardWallTex.needsUpdate = true;
+}
+
+/* ---------- 三块可点代理盒（第四单元）----------
+   照观画代理（paintHb）的写法：不可见 Box + userData。kind 用新的 'interact'，
+   与 stand / paint / plate / raw 都不冲突；三个 id 必须唯一 ——
+   setHover 的去重键是 kind + ':' + id，重了悬停高亮会串（第一单元踩过）。 */
+const INTERACT_HIT_TAB = { cards: 'extra', screen: 'quiz', board: 'board' };
+[ /* [盒子宽高深(米), 位置, id] */
+  [[9.0, 1.224, 0.3], [12.5, 0.852, -25.30], 'cards'],   // 只罩色卡墙下半那一条补录带，不挡上面 8 主色
+  [[2.6, 1.6,   0.3], [10.6, 1.85,  -14.60], 'screen'],
+  [[4.2, 2.50,  0.3], [15.4, 2.05,  -14.60], 'board']    // 更新模块第 26 轮随墙面一同放大
+].forEach(([size, pos, id]) => {
+  const hb = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
+    new THREE.MeshBasicMaterial({ visible: false }));
+  hb.position.set(pos[0], pos[1], pos[2]);
+  hb.userData = { kind: 'interact', id };
+  scene.add(hb); hitboxes.push(hb);
+});
+
+drawCardWall();
+drawBoardWall();
 
 /* ================= 室外：地面 / 甬道 / 灯柱 ================= */
 const ground = new THREE.Mesh(new THREE.CircleGeometry(74, 72),
@@ -3241,6 +4257,133 @@ scene.add(path);
   const pl = new THREE.PointLight('#ffdca8', 10, 12, 2);
   pl.position.set(s * 4.3, 2.6, 31.5); scene.add(pl);
 });
+
+/* ================= 地面参观动线（第 35 轮 · 润色意见第 1 条）=================
+   沿用馆内既有的「金色虚线 + 纸色托底三角箭头」语言 —— 平面导览图（#b6873a +
+   setLineDash([9,7])）与剖面游览图（GOLD 虚线 + 实心三角 + 纸色圆托）都用它，
+   地面上照抄一套，三处读起来才是一套导视系统而不是三种画法。
+
+   ⚠️ **方向烘进贴图**：所有贴花只用 rotX = −π/2（外加减一个 rotY 定走向），
+      绝不去算 rotation.z 与 Euler 序。绕 X 转 −90° 躺平后：
+        贴图"上"（canvas 顶）→ 世界 −Z（北）｜ 贴图"右" → 世界 +X（东）
+      所以 `deg` 一律按「**0 = 朝北，顺时针为正**」记：0=北、π/2=东、π=南、−π/2=西。
+   ⚠️ 贴地高度**一律 y = 0.014**（箭头 0.021，压在虚线上）：房地面 0.004、主厅地面 0、
+      甬道 0.01 都在它之下，halo 0.02 / pickRing 0.03 在它之上 —— 7~10mm 的余量在 20m 处
+      远超深度精度（24 位深度在 20m 处约 0.24mm），不会闪。
+   ⚠️ 纯装饰：**不进 hitboxes（交互只查那个数组）、不加 blocker、不动 WALK、不动物理**。
+   ⚠️ 走线全部避开了 blockers：主轴停在南侧展台 (0,±10.6) r=1.7 之外（z=12.9）；
+      八角主厅走 r=7.6 的环线而不是沿 x=0 直穿（展台 i=2 / i=6 正落在 (0,±10.6)）；
+      壹区南墙那段放在 z=22.9（矮柜 blocker z 到 24.16−1.0 = 23.16）；西墙那段放在 x=−17.3
+      （西墙标本 blocker x=−18.55 r=0.6）。改这些数之前先照 §八 的办法重新核一遍净空。 */
+const ROUTE_Y = 0.014, ROUTE_ARROW_Y = 0.021;
+const ROUTE_GOLD = '#b6873a';
+const routeDirDeg = (dx, dz) => Math.atan2(dx, -dz);   /* 世界方向 → 贴花 deg（0=北，顺时针） */
+
+/* 箭头贴花：纸色圆托 + 金色箭头，指向按 deg 直接画进 canvas（按 deg 缓存，同一角度只造一张） */
+const _arrowTexCache = new Map();
+function routeArrowTex(deg) {
+  const k = deg.toFixed(4);
+  if (_arrowTexCache.has(k)) return _arrowTexCache.get(k);
+  const tex = canvasTex(256, 256, (ctx) => {
+    ctx.translate(128, 128);
+    ctx.fillStyle = 'rgba(243,236,221,0.82)';       /* 免得与底下的虚线糊在一起 */
+    ctx.beginPath(); ctx.arc(0, 0, 78, 0, Math.PI * 2); ctx.fill();
+    ctx.rotate(deg);
+    ctx.beginPath();
+    ctx.moveTo(0, -66); ctx.lineTo(50, 44); ctx.lineTo(0, 20); ctx.lineTo(-50, 44);
+    ctx.closePath();
+    ctx.fillStyle = ROUTE_GOLD; ctx.fill();
+    ctx.strokeStyle = 'rgba(120,90,40,0.5)'; ctx.lineWidth = 3; ctx.stroke();
+  });
+  _arrowTexCache.set(k, tex);
+  return tex;
+}
+function routeArrowAt(x, z, deg, w = 0.80) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w),
+    new THREE.MeshBasicMaterial({ map: routeArrowTex(deg), transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, ROUTE_ARROW_Y, z);
+  m.renderOrder = 2; m.userData.route = { deg, x, z };
+  scene.add(m);
+  return m;
+}
+function routeArrowOn(x0, z0, x1, z1, ts) {
+  const dx = x1 - x0, dz = z1 - z0, deg = routeDirDeg(dx, dz);
+  ts.forEach(t => routeArrowAt(x0 + dx * t, z0 + dz * t, deg));
+}
+
+/* 虚线段：一个贴花周期 = 1.6 m（0.96 m 金线 + 0.64 m 空档），与 setLineDash([9,7]) 同款节奏。
+   一段一条纹理、一个 mesh —— 不逐段建 mesh，省几十个 draw call。 */
+function routeDashSeg(x0, z0, x1, z1, w = 0.44) {
+  const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
+  if (len < 0.25) return null;
+  const ppm = Math.min(88, 2048 / len);
+  const tex = canvasTex(Math.round(1.6 * ppm), Math.round(w * ppm), (ctx, W, H) => {
+    ctx.fillStyle = 'rgba(243,236,221,0.42)';                  /* 纸色底：深色地面上也读得出来 */
+    ctx.fillRect(0, Math.round(H * 0.26), W, Math.round(H * 0.48));
+    ctx.fillStyle = ROUTE_GOLD;
+    ctx.fillRect(0, Math.round(H * 0.30), Math.round(W * 0.60), Math.round(H * 0.40));
+  });
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.x = len / 1.6;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(len, w),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  /* order 'YXZ' → R = Ry · Rx：**先躺平、再绕世界 Y 转到走向**。
+     默认的 'XYZ' 是 R = Rx · Ry，那个 Y 会先转、把条带的横向轴也带歪，南北段就横过来了。 */
+  m.rotation.order = 'YXZ';
+  m.rotation.x = -Math.PI / 2;
+  m.rotation.y = -Math.atan2(dz, dx);
+  m.position.set((x0 + x1) / 2, ROUTE_Y, (z0 + z1) / 2);
+  m.renderOrder = 1;
+  scene.add(m);
+  return m;
+}
+
+/* 八角主厅环线：24 段圆弧拼成的虚线圆（RingGeometry 直接给角度区间，不用贴图，虚得干净）。
+   为什么走环线：8 座展台在 r=10.6 上按 45° 均布，i=2 / i=6 正落在 (0, ±10.6)，
+   沿 x=0 直穿会撞展台（blocker r=1.7）。r=7.6 离中央信息台（r=1.9）与展台都够远。 */
+const RING_R = 7.6;
+(function routeRing() {
+  const n = 24, step = Math.PI * 2 / n, on = step * 0.60;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(RING_R - 0.22, RING_R + 0.22, 14, 1, i * step, on),
+      new THREE.MeshBasicMaterial({ color: ROUTE_GOLD, transparent: true, opacity: 0.9, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = ROUTE_Y;
+    m.renderOrder = 1;
+    scene.add(m);
+  }
+})();
+
+/* 走向表：一处集中，改了这里动线就跟着变；也是 §八 净空自检的数据源 */
+const ROUTE_SEGS = [
+  { a: [  0.0,  35.4], b: [  0.0,  12.9], ts: [0.10, 0.32, 0.54, 0.76], n: '甬道 → 序厅 → 主厅南门' },
+  { a: [ -0.9,  21.0], b: [-17.3,  21.0], ts: [0.20, 0.45, 0.72], n: '序厅 → 壹区 主轴' },
+  { a: [-17.3,  21.0], b: [-17.3,  18.4], ts: [0.50], n: '壹区 北折' },
+  { a: [-17.3,  18.4], b: [ -7.9,  18.4], ts: [0.25, 0.62, 0.90], n: '壹区 工艺（北墙）' },
+  { a: [ -7.9,  18.4], b: [ -7.9,  22.9], ts: [0.50], n: '壹区 东折' },
+  { a: [ -7.9,  22.9], b: [-17.3,  22.9], ts: [0.25, 0.65], n: '壹区 成品（南墙）' },
+  { a: [-17.3,  22.9], b: [-17.3,  21.0], ts: [], n: '壹区 收口' },
+  { a: [  0.0, -13.6], b: [  0.0, -22.2], ts: [0.25, 0.62], n: '内厅 主轴' },
+  { a: [  0.4, -20.0], b: [ 13.6, -20.0], ts: [0.15, 0.42, 0.70], n: '内厅 → 肆区' },
+];
+ROUTE_SEGS.forEach(s => {
+  routeDashSeg(s.a[0], s.a[1], s.b[0], s.b[1]);
+  routeArrowOn(s.a[0], s.a[1], s.b[0], s.b[1], s.ts);
+});
+
+/* 展台绕行提示：主轴到 z=12.9 就到头了（正前方 (0,10.6) 是展台，blocker r=1.7，
+   切向至少要偏 48° 才绕得过去），所以在此给一对左右分开的箭头，接着交给环线。 */
+routeArrowAt(-1.05,  12.9, -Math.PI / 4);
+routeArrowAt( 1.05,  12.9,  Math.PI / 4);
+/* 主厅北段同理，两箭由两侧向中轴收拢，指向内厅门 */
+routeArrowAt(-1.05, -12.7,  Math.PI / 4);
+routeArrowAt( 1.05, -12.7, -Math.PI / 4);
+/* 环线 8 支切向箭头：落在相邻两展台的角平分线上（22.5° + 45°k），逆着看也分得清走向 */
+for (let k = 0; k < 8; k++) {
+  const t = Math.PI / 8 + k * Math.PI / 4;
+  routeArrowAt(RING_R * Math.cos(t), RING_R * Math.sin(t), t + Math.PI);
+}
 
 /* ---------- 主展墙画面：拿到真图后自动替换占位 ---------- */
 const paintImg = document.getElementById('paint-img');
@@ -3342,6 +4485,18 @@ const PAINT_IDX = -2;              // showInfo / proximity 用 -2 代表「画�
 controls.addEventListener('lock', () => { hint.style.opacity = 0; setHover(null); setAim(''); });
 controls.addEventListener('unlock', () => { hint.style.opacity = 1; setAim(''); });
 
+/* ---------- 请求指针锁定的小包装（所有进漫游的地方都走它） ----------
+   不用 three 的 `controls.lock()`：它把 `requestPointerLock()` 的返回值丢掉了。
+   而 Chrome/Edge 111+ 起 `requestPointerLock()` 返回 Promise，被拒时（刚按过 ESC 的冷却期、
+   权限策略、无头/自动化环境）就是一条 unhandled rejection 落进控制台 —— 页面本身没事，
+   但控制台脏了，排查真问题时会被它带偏。这里自己接一手：拒绝就安静留在自由视角，
+   还有 F 键和顶栏「进入漫游」兜底。
+   ⚠️ 控件自带的 `pointerlockerror` 会打一行 "Unable to use Pointer Lock API"，那是 three 打的，改不掉。 */
+function requestLock() {
+  const r = controls.domElement.requestPointerLock();
+  if (r && typeof r.catch === 'function') r.catch(() => {});
+}
+
 /* 只留 WASD。退出漫游改为**左键点空地**（见下面的 mousedown），
    不再让人「先按 ESC 解锁、再回头点展品」。 */
 document.addEventListener('keydown', (e) => {
@@ -3361,7 +4516,7 @@ function showInfo(i) {
       <div class="sw"><span class="chip" style="background:#a8853f"></span>
         <span><span class="nm serif">${ASSETS.painting.title}</span><br>
         <span class="hex mono">${ASSETS.painting.author}</span></span></div>
-      <div class="obj">第二单元 · 绘事・绢上观</div>
+      <div class="obj">叁 · 绘事・绢上观</div>
       <div class="poem serif">珂罗版高清古画，画前 8 块低斜小展牌，一色一牌。<br>
         <span class="au">也可直接点击画面上前观看</span></div>
       <button class="open-scroll">观画 · 放大细看</button>`;
@@ -3429,6 +4584,14 @@ function setHover(hd) {
   canvas.style.cursor = hd ? 'pointer' : 'default';
   const si = (hd && hd.kind === 'stand') ? hd.idx : -1;
   exhibits.forEach((e, k) => { e.pickRing.visible = (k === si); });
+  /* 原料：24 件墙料 + 8 个柜内标本位共享 8 种原料，靠唯一 id 点亮命中的那一个 */
+  const ri = (hd && hd.kind === 'raw') ? hd.id : '';
+  RAW_PICKS.forEach(p => { p.ring.visible = (p.id === ri); });
+  /* 工序台：四座台各一圈细铜环，同样靠唯一 id 点亮命中的那一座。
+     ⚠️ 与原料是两套数组、两套 id（原料 id = 色 id + '@wallN' / '@bayN'，工序 id = 'p1'…'p4'），
+        不能合成一套 —— 合成后两族 id 会混进同一个命名空间，唯一性断言就没法做了。 */
+  const pri = (hd && hd.kind === 'process') ? hd.id : '';
+  PRO_PICKS.forEach(p => { p.ring.visible = (p.id === pri); });
 }
 
 /* ---------- 「左键点下去会怎样」的提示 ----------
@@ -3457,9 +4620,21 @@ function setAim(text, x, y) {
 }
 
 /* 同一个提示，锁定时说「点击鼠标左键 · X」，自由视角下说「点击X」 */
+const AIM_WORD = { stand: '进入卷轴', paint: '放大观画', plate: '放大观画',
+                   raw: '查看这件原料', process: '查看这道工序', interact: '进入互动区' };
 function aimTextFor(hd, locked) {
   if (!hd) return locked ? AIM_BLANK : '';
-  return (locked ? '点击鼠标左键 · ' : '点击') + (hd.kind === 'stand' ? '进入卷轴' : '放大观画');
+  const w = AIM_WORD[hd.kind] || AIM_WORD.paint;
+  return (locked ? '点击鼠标左键 · ' : '点击') + w;
+}
+
+/* 漫游（指针锁定）时中心射线的取景：proximity() 只认主厅 8 座展台与画作半径，
+   第一单元四座矮柜 / 四座工序台 / 第四单元三块板全都不在其中 ——
+   所以锁定时 currentIdx 恒为 -1，准星永远只显示「点空地退出漫游」。
+   要让这三族新对象在漫游里也点得动，必须在屏幕中心自己打一条射线。
+   ⚠️ 每帧只调一次（animate 里那一次），hitboxes 已增至 49 个，别写进循环。 */
+function centerPick() {
+  return pickAt(innerWidth / 2, innerHeight / 2);
 }
 
 canvas.addEventListener('pointermove', (e) => {
@@ -3487,20 +4662,63 @@ canvas.addEventListener('click', (e) => {
   if (hd && hd.kind === 'stand') { openScroll(hd.idx); return; }
   if (hd && hd.kind === 'paint') { openPainting(); return; }
   if (hd && hd.kind === 'plate') { openPainting(hd.id); return; }
-  controls.lock();
+  if (hd && hd.kind === 'raw') { showRaw(hd.cid); currentIdx = -1; return; }
+  if (hd && hd.kind === 'process') { showProcess(hd.no); currentIdx = -1; return; }
+  if (hd && hd.kind === 'interact') { openInteract(INTERACT_HIT_TAB[hd.id] || 'quiz'); return; }
+  /* 点空地 = 进漫游。进锁之前先把信息卡收掉并清 currentIdx ——
+     proximity 只在 `best !== currentIdx` 时刷新，停在 -1 时不会执行
+     remove('show')，于是「点开原料卡 → 进漫游 → 走到没展台的地方」卡片会赖着不收。 */
+  info.classList.remove('show');
+  currentIdx = -1;
+  requestLock();
 });
 
 /* 漫游中的左键。用 mousedown：指针锁定时鼠标事件都派发给 body，canvas 收不到。
-     靠近展品 → 直接展卷 / 观画（左键即进，不必先按 ESC 解锁）
-     否则     → 退出漫游，把光标还给参观者 */
+     对着展品 / 原料 / 工序台 / 第四单元三块板 → 直接进（左键即进，不必先按 ESC 解锁）
+     否则     → 退出漫游，把光标还给参观者
+   ⚠️ 三条新判定必须插在 currentIdx 之前：中心射线比 proximity 准，
+      站在原料墙前时 currentIdx 是 -1，先判 currentIdx 就会把这一击吃掉变成「退出漫游」。 */
 document.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   if (currentView !== 'museum' || !controls.isLocked) return;
   lockedClickAt = e.timeStamp;
+  const hd = centerPick();
+  if (hd && hd.kind === 'raw') { showRaw(hd.cid); return; }
+  if (hd && hd.kind === 'process') { showProcess(hd.no); return; }
+  if (hd && hd.kind === 'interact') { openInteract(INTERACT_HIT_TAB[hd.id] || 'quiz'); return; }
   if (currentIdx === PAINT_IDX) { openPainting(); return; }
   if (currentIdx >= 0) { openScroll(currentIdx); return; }
   controls.unlock();
 });
+
+/* ---------- 进入漫游：一个函数 + 两个入口（F 键 / 顶上那个按钮） ----------
+   「点空地 = 漫游」是主路，但它有个死角：贴着墙 / 贴着互动屏 / 贴着画心的时候，
+   满屏都是可点对象，**一个能点的空地都没有**，于是再也回不到漫游，看着像卡死。
+   第三单元贴画、第四单元贴互动屏都会撞上。所以补一个与射线命中、与距离都无关的入口。
+   选 F 的理由：W/A/S/D 是移动、空格会触发按钮、Enter 会被按钮吃掉；F 与「浏览器固有的
+   ESC 退出漫游」正好配成一对（进 F / 出 ESC）。按钮是给不看提示的人留的明路。 */
+const roamBtn = document.getElementById('roam-btn');
+
+function enterRoam() {
+  if (currentView !== 'museum' || controls.isLocked) return;
+  /* 与「点空地」同款收尾：把信息卡收掉、清 currentIdx，
+     否则点开原料卡后再进漫游，卡片会赖着不收（proximity 停在 -1 不刷新）。 */
+  info.classList.remove('show');
+  currentIdx = -1;
+  requestLock();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyF' || e.repeat) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;      // 别抢浏览器的 Ctrl+F
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;   // 正在打字
+  enterRoam();
+});
+roamBtn.addEventListener('click', enterRoam);
+/* 锁定期间指针被浏览器收走，按钮收不到点击，留着只会误导 */
+controls.addEventListener('lock',   () => roamBtn.classList.add('hide'));
+controls.addEventListener('unlock', () => roamBtn.classList.remove('hide'));
 
 /* ---------- 3D 主循环 ---------- */
 const clock = new THREE.Clock();
@@ -3530,10 +4748,15 @@ function animate() {
     }
     p.y = 1.7;
     proximity();
-    /* 漫游中每帧更新准星提示：对着展台/画作就提示左键展卷/观画 */
-    setAim(currentIdx === PAINT_IDX ? AIM_PAINT
-         : currentIdx >= 0       ? AIM_STAND
-         :                         AIM_BLANK);
+    /* 漫游中每帧更新准星提示：中心射线先看新对象（原料 / 工序台 / 互动区三块板），
+       都不中才退回原来的「展台 / 画作 / 空地」—— proximity() 不查 hitboxes，
+       第一单元与第四单元里 currentIdx 恒为 -1，只有这条射线认得它们。 */
+    const chd = centerPick();
+    setAim((chd && (chd.kind === 'raw' || chd.kind === 'process' || chd.kind === 'interact'))
+      ? aimTextFor(chd, true)
+      : currentIdx === PAINT_IDX ? AIM_PAINT
+      : currentIdx >= 0         ? AIM_STAND
+      :                           AIM_BLANK);
   }
 
   renderer.render(scene, camera);
@@ -3569,6 +4792,16 @@ function outro() {
     </div>`;
   return s;
 }
+/* 诗句竖排：按「，」折成两列（七言 7+7、五言 5+5）。断列本身就是那个停顿，
+   所以「，」不渲染 —— 挂在列尾会多出一字高，两列就不等高了。
+   ⚠️ 不分列不行：15 字的句子在 1366×768 下会冲出「诗词注记」卡 110px，
+   1280×800 下冲 90px（1440×900 下 28px）。列高只有一半，各视口都留足余量。
+   想让上句回到右手边（传统右起左行、落款在最左），给 .poem-wrap 加
+   flex-direction: row-reverse 即可；现在两列按页面统一的从左到右顺序排。 */
+function poemCols(txt) {
+  const p = String(txt).split('，');
+  return p.length > 1 ? p : [txt];
+}
 function colorSeg(c, i) {
   const on = c.light ? '#2b2417' : '#ffffff';
   const s = document.createElement('section');
@@ -3594,7 +4827,7 @@ function colorSeg(c, i) {
         </div>
         <div class="card">
           <div class="card-head">诗 词 注 记</div>
-          <div class="poem-wrap"><div class="pt serif">${c.poem}</div><div class="au">${c.poet}</div></div>
+          <div class="poem-wrap">${poemCols(c.poem).map(t => `<div class="pt serif">${t}</div>`).join('')}<div class="au">${c.poet}</div></div>
         </div>
       </div>
       <div class="seg-foot">
@@ -3661,6 +4894,24 @@ document.getElementById('back-btn').addEventListener('click', () => backToMuseum
    ============================================================ */
 let revealPlayed = false;
 
+/* ---------- 从哪儿来，回哪儿去 ----------
+   在漫游里左键点开卷轴 / 观画 / 互动区时记一笔，返回展厅时把漫游还给参观者。
+   不记这一笔会撞上一个死角：**人是怎么贴上互动屏和画心的？是漫游走近之后点的。**
+   返回展厅时人是自由视角，且鼻尖还顶着那块板 —— 满屏都是可点对象，点哪儿都又进全屏，
+   永远走不到 `controls.lock()`。「进全屏前在漫游 → 返回后仍在漫游」正好把这个闭环拆掉：
+   回来就是漫游态，左键能继续走、点空地能解锁，和「漫游中左键直达」是同一套手感。
+   ⚠️ 记的是 unlock **之前** 的 isLocked —— unlock 之后就读不到了。
+   ⚠️ 锁请求可能被浏览器拒绝（刚从 ESC 解锁时有一小段冷却），那时静默停在自由视角即可，
+      不会更糟，而且还有 F 键兜底。 */
+let roamResume = false;
+
+function grabRoam() {
+  const want = roamResume;
+  roamResume = false;                   // 一次性，别让它泄漏到下一次切换
+  if (!want || currentView !== 'museum' || controls.isLocked) return;
+  requestLock();
+}
+
 function openScroll(i) {
   if (currentView === 'scroll') { go(i + 1); return; }
   currentView = 'scroll';
@@ -3677,10 +4928,12 @@ function openScroll(i) {
   }
   revealPlayed = true;
 
+  roamResume = controls.isLocked;      // 先记后解锁（见 grabRoam 的说明）
   if (controls.isLocked) controls.unlock();
   setHover(null);
   museumEl.classList.add('hidden');
   paintViewEl.classList.add('hidden');
+  interactViewEl.classList.add('hidden');
   scrollViewEl.classList.remove('hidden');
 
   /* ⚠️ 必须在取消 hidden 之后再定位：容器 display:none 时 clientWidth 为 0，
@@ -3694,13 +4947,15 @@ function backToMuseum() {
   currentView = 'museum';
   scrollViewEl.classList.add('hidden');
   paintViewEl.classList.add('hidden');
+  interactViewEl.classList.add('hidden');
   museumEl.classList.remove('hidden');
   clock.getDelta();                  // 丢弃暂停期间累积的时间
   renderer.setAnimationLoop(animate);
+  grabRoam();
 }
 
 /* ============================================================
-   4. 视图 C · 观画（第二单元 · 全屏放大）
+   4. 视图 C · 观画（第三单元 · 全屏放大）
    ============================================================ */
 const paintViewEl   = document.getElementById('view-painting');
 const paintImgEl    = paintImg;
@@ -3771,11 +5026,13 @@ function syncPaintFrame() {
 function openPainting(colorId) {
   if (currentView === 'painting') { selectPaintChip(colorId); return; }
   currentView = 'painting';
+  roamResume = controls.isLocked;
   if (controls.isLocked) controls.unlock();
   setHover(null);
   info.classList.remove('show');
   museumEl.classList.add('hidden');
   scrollViewEl.classList.add('hidden');
+  interactViewEl.classList.add('hidden');
   paintViewEl.classList.remove('hidden');
   armPaintAudio();                 // 到这一步才去取配乐（见「5. 配乐」段的说明）
   syncPaintFrame();
@@ -3787,15 +5044,646 @@ function closePainting() {
   if (currentView !== 'painting') return;
   currentView = 'museum';
   paintViewEl.classList.add('hidden');
+  interactViewEl.classList.add('hidden');
   museumEl.classList.remove('hidden');
   clock.getDelta();
   renderer.setAnimationLoop(animate);
+  grabRoam();
 }
 
 paintImg.addEventListener('load',  () => { if (currentView === 'painting') syncPaintFrame(); });
 paintImg.addEventListener('error', () => { if (currentView === 'painting') syncPaintFrame(); });
 renderGuide();
 syncPaintFrame();
+
+/* ============================================================
+   4.5 视图 D · 互动（第四单元 · 感知・互动）
+   来自「更新模块」分叉（那里的第 24 / 26 / 28 轮），按其原样移植。
+   四个标签页共用一套 open / close / switchTab；文案全部来自
+   EXTRA_COLORS / QUIZ / ASSETS.u4，改文案不用碰逻辑。
+   ⚠️ 本段只用 document.getElementById + createElement + textContent，
+      不 querySelector、不 innerHTML —— 桩环境里 querySelectorAll 恒为空，
+      innerHTML 写用户输入还有注入风险。
+   ============================================================ */
+/* interactViewEl 见文件上方 view-museum / view-scroll 那几行（避 TDZ） */
+const INTERACT_TABS = ['quiz', 'color', 'board', 'extra'];
+const interactBuilt = {};
+let interactTab = 'quiz';
+
+function switchTab(name) {
+  if (INTERACT_TABS.indexOf(name) < 0) name = interactTab;
+  interactTab = name;
+  INTERACT_TABS.forEach(k => {
+    const p = document.getElementById('itab-' + k);
+    const b = document.getElementById('tab-' + k);
+    if (p) { if (k === name) p.classList.remove('hidden'); else p.classList.add('hidden'); }
+    if (b) { if (k === name) b.classList.add('on'); else b.classList.remove('on'); }
+  });
+  if (!interactBuilt[name]) {          // 惰性：第一次切到哪页才建哪页
+    interactBuilt[name] = true;
+    if (name === 'quiz') buildQuiz();
+    else if (name === 'color') buildCard();
+    else if (name === 'board') renderNotes();
+    else if (name === 'extra') renderExtra();
+  }
+}
+
+function openInteract(tab) {
+  if (currentView === 'interact') { switchTab(tab); return; }
+  currentView = 'interact';
+  roamResume = controls.isLocked;
+  if (controls.isLocked) controls.unlock();
+  setHover(null);
+  info.classList.remove('show');
+  museumEl.classList.add('hidden');
+  scrollViewEl.classList.add('hidden');
+  paintViewEl.classList.add('hidden');
+  interactViewEl.classList.remove('hidden');
+  switchTab(tab || 'quiz');
+  renderer.setAnimationLoop(null);
+}
+
+function closeInteract() {
+  if (currentView !== 'interact') return;
+  currentView = 'museum';
+  interactViewEl.classList.add('hidden');
+  museumEl.classList.remove('hidden');
+  clock.getDelta();                    // 丢弃暂停期间累积的时间，回来不瞬移
+  renderer.setAnimationLoop(animate);
+  grabRoam();
+}
+
+/* ---------- ① 八色答题 ---------- */
+let quizPick = [], quizEls = [], quizDone = false;
+
+function buildQuiz() {
+  const box = document.getElementById('quiz-list');
+  if (!box) return;
+  box.textContent = '';
+  quizPick = new Array(QUIZ.length).fill(-1);
+  quizEls = []; quizDone = false;
+  QUIZ.forEach((item, qi) => {
+    const q = document.createElement('div'); q.className = 'q';
+    const h = document.createElement('div'); h.className = 'qh';
+    const no = document.createElement('span'); no.className = 'no';
+    no.textContent = '第 ' + (qi + 1) + ' 题';
+    const qt = document.createElement('span'); qt.textContent = item.q;
+    h.appendChild(no); h.appendChild(qt); q.appendChild(h);
+
+    const opts = document.createElement('div'); opts.className = 'opts';
+    const labels = [];
+    item.opts.forEach((txt, oi) => {
+      const lab = document.createElement('label'); lab.className = 'opt';
+      const rdo = document.createElement('input');
+      rdo.type = 'radio'; rdo.name = 'quizq' + qi; rdo.value = String(oi);
+      rdo.addEventListener('change', () => { quizPick[qi] = oi; });
+      const sp = document.createElement('span'); sp.textContent = txt;
+      lab.appendChild(rdo); lab.appendChild(sp);
+      opts.appendChild(lab); labels.push(lab);
+    });
+    q.appendChild(opts);
+
+    const why = document.createElement('div'); why.className = 'why';
+    why.textContent = item.why;
+    q.appendChild(why);
+
+    box.appendChild(q);
+    quizEls.push({ q, labels });
+  });
+  document.getElementById('quiz-score').textContent = '';
+}
+
+function quizCheck() {
+  if (!quizEls.length) return;
+  let score = 0, blank = 0;
+  quizEls.forEach((rec, i) => {
+    const right = QUIZ[i].a, ans = quizPick[i];
+    rec.q.className = 'q';
+    rec.labels.forEach((lab, oi) => { lab.className = (oi === right) ? 'opt good' : 'opt'; });
+    if (ans < 0) { blank++; return; }
+    if (ans === right) { score++; rec.q.className = 'q ok'; }
+    else { rec.q.className = 'q bad'; rec.labels[ans].className = 'opt wrong'; }
+  });
+  quizDone = true;
+  document.getElementById('quiz-score').textContent = '得分 ' + score + ' / ' + QUIZ.length
+    + (blank ? '（另有 ' + blank + ' 题未答）' : '')
+    + (score === QUIZ.length ? ' —— 八色都认得了。' : ' —— 错的几处，回展柜再看一眼。');
+}
+
+function quizReset() {
+  quizPick = new Array(QUIZ.length).fill(-1);
+  quizEls.forEach(rec => {
+    rec.q.className = 'q';
+    rec.labels.forEach(lab => { lab.className = 'opt'; });
+  });
+  /* 清掉已选中的单选钮（走 DOM 树，不用选择器） */
+  const box = document.getElementById('quiz-list');
+  if (box && box.children) {
+    for (const q of box.children) {
+      const opts = q.children && q.children[1];
+      if (!opts || !opts.children) continue;
+      for (const lab of opts.children) {
+        const rdo = lab.children && lab.children[0];
+        if (rdo) rdo.checked = false;
+      }
+    }
+  }
+  quizDone = false;
+  document.getElementById('quiz-score').textContent = '';
+}
+
+/* ---------- ② 填色卡（可导出）----------
+   第 35 轮（润色意见第 4 条）：原来是一张「八色团扇」（8 扇区 + 花心），改成**一幅山水线稿**。
+   用户原话是「分色线稿你在网上找一个简易山水画」—— 那条路实测走不通：Commons 的 curl 20 秒超时、
+   WebFetch 直接返回「无法验证域名」，而且古籍扫描单页 2~5MB，按 GitHub Pages 实测 35KB/s
+   访客要等一两分钟，与「资源必须压体积」的项目规矩相冲。
+   所以**改为 canvas 程序化画一幅芥子园味道的简易山水**：零依赖、可离线、体积为 0，
+   而且 8 个可填区与墨线严丝合缝（下载来的画做不到这点）。
+   `assets/card/README.txt` 是留给「真找着一张国画线稿」的换图槽位说明 —— 页面**不读**这个目录，
+   真有图了得**连图带 8 条 poly 一起换**（只丢图、不重描 poly，点上去会填错位置），
+   步骤写在那份 README 里。
+
+   8 个分区 ↔ 八色（有依据、可讲解）：
+     天 月白 ｜ 月 藕合 ｜ 远山 黛蓝 ｜ 主峰 石青
+     坡石 苍黄 ｜ 江水 霁蓝 ｜ 松 松花 ｜ 秋林 杏黄
+
+   ⚠️ 命中测试**继续不用 Path2D / ctx.isPointInPath**（模块顶层一引用 Path2D 就是
+      ReferenceError → 整页白屏，这是项目铁律），改用**射线法点在多边形内**（纯数学）。
+   ⚠️ CARD_REGIONS 的数组顺序同时定义两件事：
+        · 「命中优先级」—— 前面先测，先命中先算（前面的压在上面）；
+        · 「填充顺序」—— 按**逆序**画，远的先铺。
+      「天」的 poly 是整个场景的大框、放在最后 = 铺底，其余各区把它盖住。
+   ⚠️ 坐标一律写**设计空间 1600×1000**，drawCard 用一次 setTransform 整体缩放 ——
+      屏幕（1×）与导出（2×）走同一份代码、同一套坐标，所见即所得。 */
+const CARD_W = 1800, CARD_H = 1240;
+const DESIGN_W = 1600, DESIGN_H = 1000;
+
+/* —— 山水几何（设计空间坐标），填充区与墨线共用这一份，才可能严丝合缝 —— */
+const FAR_TOP = [[80,452],[200,398],[330,455],[470,392],[610,450],[760,400],
+                 [900,462],[1040,394],[1180,452],[1320,398],[1440,466],[1520,436]];
+const WATER_TOP = [[80,626],[240,614],[400,628],[620,612],[840,626],[1060,614],
+                   [1240,628],[1400,616],[1520,626]];
+const PEAK  = [[700,262],[1040,650],[360,650]];
+const ROCKS = [[80,742],[170,766],[300,748],[420,780],[540,764],[640,806],[660,880],[80,880]];
+/* 松：三层伞状（芥子园「马尾松」的骨架）—— 一个整圆会画成蘑菇 */
+const PINE  = [[238,404],[276,438],[314,472],[280,494],[336,510],[368,548],[372,584],[312,596],
+               [264,614],[256,626],[256,720],[220,720],[220,626],[212,614],[164,596],[104,584],
+               [108,548],[140,510],[196,494],[162,472],[200,438]];
+const GROVE = [[1120,660],[1160,560],[1240,548],[1290,600],[1360,548],[1430,586],
+               [1450,660],[1400,700],[1240,706],[1150,690]];
+const MOON_C = [1330, 250], MOON_R = 58;
+const MOON_POLY = Array.from({ length: 12 }, (_, i) => {
+  const a = i * Math.PI / 6;                       // 十二边形逼近圆 —— 射线法要多边形
+  return [Math.round(MOON_C[0] + Math.cos(a) * MOON_R),
+          Math.round(MOON_C[1] + Math.sin(a) * MOON_R)];
+});
+
+/* —— 墨色三档（焦墨主轮廓 / 淡墨皴擦水纹 / 清墨云气）——
+   纸上用深墨；**填了深色的那一层换成浅墨**（霁蓝 / 石青 / 黛蓝这几个底色上深墨根本看不见，
+   等于把线稿吃掉）。CUR_A/B/C 是「这一层当前该用的墨」，drawCard 每层按底色明度切换；
+   墨线函数一律读 CUR_*，别直接写死深墨。 */
+const INK_DARK = ['rgba(54,46,32,0.92)', 'rgba(54,46,32,0.42)', 'rgba(54,46,32,0.20)'];
+const INK_PALE = ['rgba(248,242,229,0.82)', 'rgba(248,242,229,0.42)', 'rgba(248,242,229,0.24)'];
+let CUR_A = INK_DARK[0], CUR_B = INK_DARK[1], CUR_C = INK_DARK[2];
+function inkPath(ctx, pts, close) {
+  ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  if (close) ctx.closePath();
+  ctx.stroke();
+}
+
+/* —— 每个分区自带一支笔 ——
+   ⚠️ 墨线**不单独成一趟**，而是与填色交替、按「远 → 近」同一个顺序走：
+        铺色(天) → 画线(天) → 铺色(远山) → 画线(远山) → … → 铺色(月) → 画线(月)
+      近处的填色天然盖掉远处的线（远山的脊线不会穿进主峰里、水纹不会压在坡石上），
+      不用去跟 ctx.clip 的奇偶填充较劲。
+   ⚠️ 所以 CARD_REGIONS 的**顺序一身三职**：命中优先级（前面先测）、填充顺序（逆序铺）、
+      墨线层序（正序画，index 越小越近）。动顺序之前三件事都要想到。 */
+
+/* 天：云气 + 飞鸟 */
+const INK_SKY = ctx => {
+  ctx.strokeStyle = CUR_C; ctx.lineWidth = 3;          // 如意云头：三个圆 lobes 收一条平底
+  [[330, 336, 430], [900, 292, 380], [1180, 366, 300]].forEach(([x, y, w]) => {
+    const h = 30;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(x, y - h, x + w * 0.24, y - h * 0.95, x + w * 0.30, y - h * 0.34);
+    ctx.bezierCurveTo(x + w * 0.38, y - h * 1.20, x + w * 0.62, y - h * 1.05, x + w * 0.66, y - h * 0.34);
+    ctx.bezierCurveTo(x + w * 0.76, y - h * 0.90, x + w, y - h * 0.52, x + w, y);
+    ctx.stroke();
+  });
+  ctx.strokeStyle = CUR_B; ctx.lineWidth = 2;
+  [[600, 240, 16], [644, 214, 12], [574, 206, 11]].forEach(([x, y, s]) =>
+    inkPath(ctx, [[x - s, y], [x, y - s * 0.55], [x + s, y]], false));
+};
+
+/* 远山：山脊 + 几道淡皴（第 37 轮把头从 y≈450 抬到 y≈400，原来太扁、只像一条折线） */
+const INK_RIDGE = ctx => {
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 3;
+  inkPath(ctx, FAR_TOP, false);
+  ctx.strokeStyle = CUR_B; ctx.lineWidth = 2;
+  [[200,398,232,468],[470,392,500,466],[760,400,792,470],[1040,394,1072,468],
+   [1320,398,1352,470],[120,452,150,516],[900,462,930,528]]
+    .forEach(([a, b, c, d]) => inkPath(ctx, [[a, b], [c, d]], false));
+};
+
+/* 主峰：轮廓 + 披麻皴 + 一笔侧峰 */
+const INK_PEAK = ctx => {
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 4;
+  inkPath(ctx, PEAK, true);
+  ctx.strokeStyle = CUR_B; ctx.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {                        // 左坡披麻皴（顺坡而下的长皴）
+    const t = 0.16 + i * 0.125;
+    const xa = 700 + (360 - 700) * t, ya = 262 + (650 - 262) * t;
+    inkPath(ctx, [[xa, ya], [xa + 24, ya + 56], [xa + 12, ya + 108]], false);
+  }
+  for (let i = 0; i < 4; i++) {                        // 右坡（短些）
+    const t = 0.22 + i * 0.16;
+    const xa = 700 + (1040 - 700) * t, ya = 262 + (650 - 262) * t;
+    inkPath(ctx, [[xa, ya], [xa - 20, ya + 50], [xa - 8, ya + 96]], false);
+  }
+  inkPath(ctx, [[560, 560], [610, 500], [664, 560]], false);   // 侧峰
+};
+
+/* 江水：横向水纹（近处长、远处短）+ 一叶孤舟 */
+const INK_WATER = ctx => {
+  ctx.strokeStyle = CUR_B; ctx.lineWidth = 2;
+  for (let i = 0; i < 7; i++) {
+    const y = 662 + i * 30, x0 = 132 + i * 48, x1 = 1462 - i * 34;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.bezierCurveTo(x0 + (x1 - x0) * 0.3, y - 9, x0 + (x1 - x0) * 0.7, y + 9, x1, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 3;          // 船身 + 桅 + 帆横
+  inkPath(ctx, [[1108, 748], [1168, 770], [1254, 770], [1312, 748]], false);
+  inkPath(ctx, [[1210, 748], [1210, 700]], false);
+  inkPath(ctx, [[1180, 716], [1240, 716]], false);
+};
+
+/* 坡石：轮廓 + 斧劈皴（短而硬的横向劈笔） */
+const INK_ROCKS = ctx => {
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 3;
+  inkPath(ctx, ROCKS, true);
+  ctx.strokeStyle = CUR_B; ctx.lineWidth = 2;
+  [[152,790],[252,800],[352,796],[452,812],[556,800]].forEach(([x, y]) => {
+    inkPath(ctx, [[x, y], [x + 34, y + 24]], false);
+    inkPath(ctx, [[x + 14, y + 10], [x + 40, y + 42]], false);
+  });
+};
+
+/* 秋林：三株树干 + 五丛树冠（波浪圆轮廓 + 点叶，才是芥子园画谱里的树） */
+const INK_GROVE = ctx => {
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 3;
+  inkPath(ctx, [[1244, 706], [1244, 604]], false);
+  inkPath(ctx, [[1292, 706], [1292, 596]], false);
+  inkPath(ctx, [[1358, 706], [1358, 610]], false);
+  ctx.lineWidth = 2;
+  [[1244,568,46],[1300,548,52],[1364,580,42],[1418,630,34],[1164,644,34]].forEach(([cx, cy, r]) => {
+    ctx.strokeStyle = CUR_A;                                 // 冠：20 段波浪圆（12 段会成六边形）
+    ctx.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const a = i / 20 * Math.PI * 2;
+      const rr = r * (1 + 0.11 * Math.sin(i * 2.1) + 0.06 * Math.cos(i * 1.35));
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = CUR_B;                                   // 点叶：向日葵螺旋铺点，确定性、不用随机数
+    for (let k = 0; k < 11; k++) {
+      const a = k * 2.399963, rd = r * Math.sqrt((k + 0.5) / 11) * 0.80;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * rd, cy + Math.sin(a) * rd, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+};
+
+/* 松：双线干 + 七簇松针（对着 PINE 三层伞尖摆） */
+const INK_PINE = ctx => {
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 5;
+  inkPath(ctx, [[228, 722], [232, 620]], false);
+  inkPath(ctx, [[248, 722], [246, 620]], false);
+  ctx.lineWidth = 3;
+  [[238,410,40],[190,482,34],[288,482,34],[128,548,38],[352,548,38],[152,588,32],[330,588,32]]
+    .forEach(([cx, cy, r]) => {
+      for (let i = 0; i < 7; i++) {
+        const a = Math.PI * (0.12 + i * 0.126);
+        inkPath(ctx, [[cx, cy], [cx + Math.cos(a) * r, cy + Math.sin(a) * r]], false);
+      }
+    });
+};
+
+/* 月：一枚圆圈，压在最上层 */
+const INK_MOON = ctx => {
+  ctx.strokeStyle = CUR_A; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(MOON_C[0], MOON_C[1], MOON_R, 0, Math.PI * 2); ctx.stroke();
+};
+
+/* lab = 未填时写部位名的那一点 */
+const CARD_REGIONS = [
+  { name: '月',   suggest: 'ouhe',      poly: MOON_POLY, lab: [1330, 262], ink: INK_MOON },
+  { name: '松',   suggest: 'songhua',   poly: PINE,      lab: [238, 598],  ink: INK_PINE },
+  { name: '秋林', suggest: 'xinghuang', poly: GROVE,     lab: [1236, 676], ink: INK_GROVE },
+  { name: '坡石', suggest: 'canghuang', poly: ROCKS,     lab: [372, 836],  ink: INK_ROCKS },
+  { name: '江水', suggest: 'jilan',     poly: [...WATER_TOP, [1520, 880], [80, 880]],
+                                                        lab: [900, 792],  ink: INK_WATER },
+  { name: '主峰', suggest: 'shiqing',   poly: PEAK,      lab: [700, 540],  ink: INK_PEAK },
+  { name: '远山', suggest: 'dailan',    poly: [[80, 610], ...FAR_TOP, [1520, 610]],
+                                                        lab: [1356, 502], ink: INK_RIDGE },
+  { name: '天',   suggest: 'yuebai',    poly: [[80, 160], [1520, 160], [1520, 880], [80, 880]],
+                                                        lab: [430, 262],  ink: INK_SKY },
+];
+const CARD_N = CARD_REGIONS.length;
+const cardCtx = document.getElementById('interact-canvas').getContext('2d');
+let cardFills = new Array(CARD_N).fill(null);
+let cardColor = null;
+
+/* #rrggbb → 感知明度（0~255）。用来判断某层该用深墨还是浅墨。 */
+function hexLum(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+}
+
+function fillPoly(ctx, pts) {
+  ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath(); ctx.fill();
+}
+
+function drawCard(ctx, W, H) {
+  const k = W / CARD_W;                            // 1 = 屏幕，2 = 导出
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#f4ecd8'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(120,105,75,0.5)'; ctx.lineWidth = Math.max(2, 3 * k);
+  ctx.strokeRect(26 * k, 26 * k, W - 52 * k, H - 52 * k);
+
+  const u = k * CARD_W / DESIGN_W;                 // 设计单位 → 设备像素
+  ctx.setTransform(u, 0, 0, u, (W - DESIGN_W * u) / 2, (H - DESIGN_H * u) / 2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#2f2a1e'; ctx.font = `bold 58px ${CJK}`;
+  ctx.fillText('山 水 填 色', 800, 76);
+  ctx.fillStyle = 'rgba(120,105,75,0.85)'; ctx.font = `23px ${CJK}`;
+  ctx.fillText('传统古色 · 3D 博物馆　肆 · 感知・互动　填色卡', 800, 114);
+  ctx.strokeStyle = 'rgba(120,105,75,0.4)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(300, 136); ctx.lineTo(1300, 136); ctx.stroke();
+
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  /* 远端 → 近端：铺一层色，马上画这一层的墨线；下一层（更近）的填色会盖掉上一层的线，
+     所以远山的脊线不会穿进主峰、水纹不会压在坡石上。顺序即 CARD_REGIONS 的层序。
+     底色深的那一层改用浅墨（CUR_* → INK_PALE），深色上才看得见线。 */
+  for (let i = CARD_N - 1; i >= 0; i--) {
+    const r = CARD_REGIONS[i], f = cardFills[i];
+    if (f) { ctx.fillStyle = f; fillPoly(ctx, r.poly); }
+    const ink = (f && hexLum(f) < 118) ? INK_PALE : INK_DARK;
+    CUR_A = ink[0]; CUR_B = ink[1]; CUR_C = ink[2];
+    r.ink(ctx);
+  }
+
+  ctx.font = `24px ${CJK}`;                        // 未填区的部位名（淡墨小字，填了就撤）
+  ctx.fillStyle = 'rgba(70,60,42,0.5)';
+  CARD_REGIONS.forEach((r, i) => { if (!cardFills[i]) ctx.fillText(r.name, r.lab[0], r.lab[1]); });
+
+  ctx.fillStyle = 'rgba(120,105,75,0.6)'; ctx.font = `22px ${CJK}`;
+  ctx.fillText('八色各有所宜 · 导出 PNG 可收藏', 800, 952);
+}
+
+/* 射线法：点在多边形内（pnpoly）。纯数学，不碰 Path2D / isPointInPath。 */
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function hitRegion(px, py) {
+  for (let i = 0; i < CARD_N; i++) if (pointInPoly(px, py, CARD_REGIONS[i].poly)) return i;
+  return -1;
+}
+/* 屏幕坐标 → 设计坐标（drawCard 那套 setTransform 的逆变换，1× 画布） */
+function cardPointFromEvent(e) {
+  const cv = document.getElementById('interact-canvas');
+  const r = cv.getBoundingClientRect();
+  if (!r || !r.width || !r.height) return null;    // 容器不可见时别换算
+  const u = CARD_W / DESIGN_W;
+  return [((e.clientX - r.left) * CARD_W / r.width  - (CARD_W - DESIGN_W * u) / 2) / u,
+          ((e.clientY - r.top ) * CARD_H / r.height - (CARD_H - DESIGN_H * u) / 2) / u];
+}
+
+function fillRegion(i, hex) {
+  if (!(i >= 0 && i < CARD_N)) return false;
+  const c = (typeof hex === 'string' && hex) ? hex : cardColor;
+  if (!c) return false;
+  cardFills[i] = c;
+  drawCard(cardCtx, CARD_W, CARD_H);
+  return true;
+}
+
+function buildCard() {
+  const box = document.getElementById('card-pal');
+  if (!box) return;
+  box.textContent = '';
+  COLORS.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'cchip'; b.type = 'button';
+    const i = document.createElement('i'); i.style.background = c.hex;
+    const sp = document.createElement('span'); sp.textContent = c.name;
+    b.appendChild(i); b.appendChild(sp);
+    b.addEventListener('click', () => selectCardColor(c.hex, b));
+    box.appendChild(b);
+  });
+  const cv = document.getElementById('interact-canvas');
+  if (cv) cv.style.cursor = 'default';
+  resetCard();
+}
+
+function selectCardColor(hex, btn) {
+  cardColor = hex;
+  const box = document.getElementById('card-pal');
+  if (box && box.children) {
+    for (const ch of box.children) ch.classList.remove('on');
+  }
+  if (btn) btn.classList.add('on');
+  const c = COLORS.find(x => x.hex === hex);
+  setCardNote('已选「' + (c ? c.name : hex) + '」—— 点画上的部位上色。');
+}
+
+function resetCard() {
+  cardFills = new Array(CARD_N).fill(null);
+  cardColor = null;
+  const box = document.getElementById('card-pal');
+  if (box && box.children) {
+    for (const ch of box.children) ch.classList.remove('on');
+  }
+  drawCard(cardCtx, CARD_W, CARD_H);
+  setCardNote('先选一支颜色，再点画上的部位。');
+}
+
+function setCardNote(t) {
+  const el = document.getElementById('card-note');
+  if (el) el.textContent = t;
+}
+
+let hoverRegion = -1;
+function cardHint() {
+  return cardColor ? '已选颜色 —— 点画上的部位上色。' : '先在上面选一支颜色，再点画上的部位。';
+}
+/* 掠过时报「部位名 ＋ 它宜什么色」——否则观众无从知道哪块该填哪支 */
+function onCardMove(e) {
+  const p = cardPointFromEvent(e);
+  const i = p ? hitRegion(p[0], p[1]) : -1;
+  if (i === hoverRegion) return;
+  hoverRegion = i;
+  const cv = document.getElementById('interact-canvas');
+  if (cv) cv.style.cursor = i < 0 ? 'default' : 'pointer';
+  if (i < 0) { setCardNote(cardHint()); return; }
+  const r = CARD_REGIONS[i];
+  const c = COLORS.find(x => x.id === r.suggest);
+  setCardNote(r.name + (c ? '　宜 ' + c.name + '（' + c.hex + '）' : ''));
+}
+
+function onCardClick(e) {
+  const p = cardPointFromEvent(e);
+  if (!p) return;                                   // 容器不可见时别换算
+  const i = hitRegion(p[0], p[1]);
+  if (i < 0) { setCardNote('点到画外了 —— 对着山水里的部位点。'); return; }
+  if (!cardColor) { setCardNote('先在上面选一支颜色，再点画上的部位。'); return; }
+  fillRegion(i, cardColor);
+  setCardNote('「' + CARD_REGIONS[i].name + '」填好了 —— 换一处或换支颜色接着来。');
+}
+
+function cardStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+       + '-' + p(d.getHours()) + p(d.getMinutes());
+}
+
+function exportCard() {
+  const out = document.createElement('canvas');
+  out.width = CARD_W * 2; out.height = CARD_H * 2;
+  if (typeof out.toBlob !== 'function') return;      // 老浏览器：静默早退
+  drawCard(out.getContext('2d'), out.width, out.height);   // 同一份 drawCard = 所见即所得
+  out.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '传统古色-填色卡-' + cardStamp() + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+}
+
+/* ---------- ③ 留言板 ---------- */
+function noteStamp(ms) {
+  const d = new Date(ms || Date.now()), p = n => String(n).padStart(2, '0');
+  return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+/* 便签上只写 MM-DD（不带时分）—— 墙上那一行要留出右下的朱印位置 */
+function noteDay(ms) {
+  const d = new Date(ms || Date.now()), p = n => String(n).padStart(2, '0');
+  return p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+function renderNotes() {
+  const box = document.getElementById('note-list');
+  if (!box) return;
+  box.textContent = '';
+  const list = lsGetNotes();
+  if (!list.length) {
+    const e = document.createElement('div'); e.className = 'nempty';
+    e.textContent = '还没有留言 —— 你会是第一个。';
+    box.appendChild(e);
+    return;
+  }
+  list.forEach(n => {
+    const row = document.createElement('div'); row.className = 'nrow';
+    const t = document.createElement('div'); t.className = 'nt'; t.textContent = n.text;
+    const w = document.createElement('div'); w.className = 'nwho';
+    w.textContent = n.who || '匿名';                     // 可署名，留空即匿名
+    const d = document.createElement('div'); d.className = 'ndt'; d.textContent = noteStamp(n.t);
+    const del = document.createElement('button');
+    del.className = 'ndel'; del.type = 'button'; del.textContent = '删除';
+    del.addEventListener('click', () => deleteNote(n.id));
+    row.appendChild(t); row.appendChild(w); row.appendChild(d); row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+
+function submitNote() {
+  const inp = document.getElementById('note-input');
+  const whoInp = document.getElementById('note-who');
+  const tip = document.getElementById('note-tip');
+  const raw = inp ? inp.value : '';
+  const text = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  if (!text) { if (tip) tip.textContent = '写一句再贴 —— 空白贴上去也看不见。'; return; }
+  if (!addNote(text, whoInp ? whoInp.value : '')) {
+    if (tip) tip.textContent = '这一句没写进去 —— 换一句试试。';
+    return;
+  }
+  if (inp) inp.value = '';                               // 昵称留着，下一条不用重敲
+  if (tip) {
+    tip.textContent = (typeof localStorage !== 'undefined')
+      ? '贴上了 —— 转身回展厅，看看那面墙。'
+      : '贴上了（这台浏览器禁用了本地存储）—— 本回看得见，刷新就没了。';
+  }
+}
+
+/* ---------- ④ 续色 · 结语 ---------- */
+function renderExtra() {
+  const box = document.getElementById('extra-list');
+  if (!box) return;
+  box.textContent = '';
+  EXTRA_COLORS.forEach(c => {
+    const row = document.createElement('div'); row.className = 'xrow';
+    const sw = document.createElement('div'); sw.className = 'xsw'; sw.style.background = c.hex;
+    const body = document.createElement('div'); body.className = 'xbody';
+    const nm = document.createElement('div'); nm.className = 'xname';
+    const ns = document.createElement('span'); ns.textContent = c.name;
+    const hs = document.createElement('span'); hs.className = 'xhex'; hs.textContent = c.hex;
+    nm.appendChild(ns); nm.appendChild(hs);
+    const meta = document.createElement('div'); meta.className = 'xmeta';
+    meta.textContent = (c.kind === 'stone' ? '石色' : '水色') + ' · 原料：' + c.mat;
+    const brief = document.createElement('div'); brief.className = 'xbrief'; brief.textContent = c.brief;
+    body.appendChild(nm); body.appendChild(meta); body.appendChild(brief);
+    row.appendChild(sw); row.appendChild(body);
+    box.appendChild(row);
+  });
+}
+
+/* ---------- 接线 ---------- */
+document.getElementById('interact-back').addEventListener('click', () => closeInteract());
+INTERACT_TABS.forEach(name => {
+  document.getElementById('tab-' + name).addEventListener('click', () => switchTab(name));
+});
+document.getElementById('quiz-submit').addEventListener('click', () => quizCheck());
+document.getElementById('quiz-reset').addEventListener('click', () => quizReset());
+document.getElementById('card-export').addEventListener('click', () => exportCard());
+document.getElementById('card-clear').addEventListener('click', () => resetCard());
+document.getElementById('interact-canvas').addEventListener('click', onCardClick);
+/* mousemove 只在这里挂一次 —— buildCard 每次切到「②填色卡」都会被调一遍，
+   挂在那里面会越叠越多（同一支颜色报 N 遍）。 */
+document.getElementById('interact-canvas').addEventListener('mousemove', onCardMove);
+document.getElementById('interact-canvas').addEventListener('mouseleave', () => {
+  hoverRegion = -1;
+  const cv = document.getElementById('interact-canvas');
+  if (cv) cv.style.cursor = 'default';
+  setCardNote(cardHint());
+});
+document.getElementById('note-add').addEventListener('click', () => submitNote());
+document.getElementById('note-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitNote();
+});
+document.getElementById('extra-closing').textContent = ASSETS.u4.closing;
+
+/* Escape 退出互动区。本项目此前**一个 Escape 处理器都没有**（有意的：
+   漫游靠「左键点空地」退出，观画靠左下角返回键）—— 这里只给互动区补这一条，
+   别顺手给观画态也加上，那是本轮范围外、会改掉既有手感。 */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (currentView !== 'interact') return;
+  closeInteract();
+});
 
 /* ============================================================
    5. 配乐（文件缺失时按钮自动置灰，不影响其它功能）

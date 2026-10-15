@@ -1,7 +1,26 @@
 # 传统古色 · 3D 博物馆 —— 项目工作流文档（Handoff）
 
 > 本文档是项目的「接手说明书」，供后续 AI / 开发者快速理解全貌并继续工作。
-> 最后更新：2026-10-13（第 30 轮：**推送上线** + 配乐降到 96 kbps、两个 `<audio>` 改按需下载）；
+> 最后更新：2026-10-15（第 34 轮：**修「贴着互动屏 / 画心就再也进不去漫游」的死角** ——
+> 进漫游原本只有「点空地」一条路，而贴着板时满屏都是可点对象、一个空地都没有；
+> 新增 `roamResume`/`grabRoam()`（进全屏前在漫游 → 返回后仍在漫游）、`enterRoam()`
+> 配 **F 键 + 顶栏「进入漫游」按钮**两个兜底入口、`requestLock()` 包装（原 `controls.lock()`
+> 丢掉 `requestPointerLock()` 的 Promise，被拒时控制台留一条 unhandled rejection）。
+> **展厅内容、坐标、`blockers` 一字未动**，详见 §11 第 34 条；
+> 第 33 轮：**移植「更新模块」分叉里的第一 / 第四单元内容** —— 第一单元新增
+> 原料点选与工序台点选（32 + 4 个命中体）、三块导视牌（壹原料／贰工艺／叁成品）、加高的展柜铭牌与工序台小铭牌；
+> 第四单元新增具名的色卡墙 + 留言墙（可写真存真画）、三块可点板，以及一个全新的**视图 D · 互动**
+> 〔八色答题 / 填色卡可导出 PNG / 留言板 / 续色结语〕。**第三单元、序厅、内厅一字未动，`blockers` 未增**。
+> ⚠️ 来源文件是旧基线分叉、**不是超集**，切勿整文件覆盖；详见 §11 第 33 条与 §6 导航表）；
+> 第 32 轮：**绘事 / 物色的单元序号对调**——只改文字，展厅与展品未动；
+> 第 32 轮：用户要求把**绘事与物色两块大厅铭牌的单元序号对调**：北侧内厅（古画）由第二单元改**第三单元**、
+> 八角主厅（8 个展台）由第三单元改**第二单元**。改动只有文字：两块大厅标题带（都读 `UNITS`）、
+> 观画视图标题栏与古画信息卡、序厅平面导览图 / 剖面游览图的厅名小注、README 的路线与展台段；
+> **展品、动线、坐标、展牌数量一律未动**。⚠️ 副作用：`UNITS` 里 **`u2` 键 = 第三单元 · 绘事、
+> `u3` 键 = 第二单元 · 物色**，键名与序号不再对应（代码里 UNITS 上方有 ⚠️ 注释）。
+> ⚠️ 本文件 §7 及更早的历史条目仍按**旧序号**书写（那时「第三单元」= 八角主厅、「第二单元」= 内厅），
+> 读旧条目时按「第三↔第二」自行换算，**不要去改历史记录**。
+> 第 30 轮：**推送上线** + 配乐降到 96 kbps、两个 `<audio>` 改按需下载；
 > 第 30 轮：**项目首次推到 GitHub Pages**（`Wxyforme/chinese-colors-3d-museum`，17.4 MB，含 4 件袍类真模型
 > 与配乐）。顺带量到线上首访的真实代价并做了两件事：配乐 320 kbps→**96 kbps**（3.4MB→1.03MB），
 > 两个 `<audio>` 由 `preload` 改成**按需下载**（实测同带宽下配乐让加载遮罩 478 秒→800 秒）。
@@ -47,9 +66,14 @@
 |------|------|------|------|
 | 序厅 | 八角厅南侧（入口） | 《月曼清游图》喷绘长墙 + 8 色色谱带、前言展板（用户的展词）、导览图 | 框架完成 |
 | 第一单元 · 色源・万物生 | 西侧辅厅 | **写实颜料展厅，按加工流程三段动线**：西墙=原料（石色 12 + 水色 12 两段标本墙）+ 北墙=工艺（4 座工序台 + 流程图 + 展词板）+ 南墙=成品（4 座地平矮展柜，8 件标本 × 三层） | 已完成（第 22 轮） |
-| 第二单元 · 绘事・绢上观 | 北侧内厅（核心展区） | 主展墙古画 + 8 块低斜展牌 + 辅助展板 + **全屏观画视图** | 古画已置入（第 24 轮），**配乐/引导词/色标待置入** |
-| 第三单元 · 物色・入人间 | 八角主厅（原有） | 8 个彩色展台 + 3D 文物 + 色谱长卷 | 已完成 |
+| 第二单元 · 物色・入人间 | 八角主厅（原有） | 8 个彩色展台 + 3D 文物 + 色谱长卷 | 已完成 |
+| 第三单元 · 绘事・绢上观 | 北侧内厅（核心展区） | 主展墙古画 + 8 块低斜展牌 + 辅助展板 + **全屏观画视图** | 古画已置入（第 24 轮），**配乐/引导词/色标待置入** |
 | 第四单元 · 感知・互动 | 东侧辅厅 | 色卡墙、互动屏、留言墙 | 框架完成，**内容待置入** |
+
+> ⚠️ **序号基准（2026-10-14 第 31 轮起）**：绘事与物色的单元序号对调过 —— 八角主厅（8 个展台）是
+> **第二单元 · 物色**，北侧内厅（古画）是**第三单元 · 绘事**。展厅与展品一件没动，只换了编号文字。
+> 本文件 §7 及更早的历史条目仍按**旧序号**写（旧「第三单元」= 八角主厅、旧「第二单元」= 内厅），
+> 对照时按「第二 ↔ 第三」换算即可。
 
 - **3D 博物馆**：第一人称漫游（起点在馆外甬道，正对门楣匾额），8 个展台各陈列一件文物（AI 生成的 3D 模型 + 真实馆藏图），每个展台上罩**透明玻璃展柜**。
 - **颜色科普卷轴**：横向滚动的「色谱长卷」，每色一段，含文物考据、AIGC 主视觉、古人诗词、颜色释义与古籍出处。
@@ -80,7 +104,7 @@
 
 ```
 museum-3d/                        ← 工作主目录（工作区 C:\Users\WANGSP\WorkBuddy\2026-10-11-15-12-49\ 下）
-├── index.html                    ← 主页面（Three.js 单文件，三视图）
+├── index.html                    ← 主页面（Three.js 单文件，**四**视图：展厅 / 卷轴 / 观画 / 互动）
 ├── HANDOFF.md                    ← 本文档
 ├── README.md                     ← 本地运行说明
 ├── 新建 文本文档.txt              ← ★ 用户手写的策展方案（需求权威来源，改需求改这里）
@@ -102,6 +126,8 @@ museum-3d/                        ← 工作主目录（工作区 C:\Users\WANGS
 │   ├── main/                     ← 8 张 AIGC 主视觉（main_*.png）
 │   ├── painting/                 ← painting.jpg（十二开 6×2 拼图）+ painting-wall.jpg（横排长卷）
 │   ├── audio/                    ← bgm.mp3（《高山流水》截 90 秒；馆内与观画**共用这一首**，见 §7.9）
+│   ├── raw/                      ← 第一单元八色的「原料图」raw_<色id>.jpg（第 33 轮，1400²，共 2.53MB）
+│   │   └── README.txt            ← 记来料、**切**水印的经过、哪张配哪个色（⚠️ AI 生成示意图，非文物实拍）
 │   └── paper_texture.png         ← 卷轴用的古旧宣纸纹理
 ├── .workbuddy/
 │   ├── applications.yaml         ← 已发布应用记录（app 定位器）
@@ -172,10 +198,13 @@ museum-3d/                        ← 工作主目录（工作区 C:\Users\WANGS
 | 视图 A DOM | 367~385 | 画布 + 顶栏（色点 + ♪ 配乐钮）+ 提示 + 信息卡 + 遮罩 |
 | 视图 B DOM | 387~411 | 顶栏(含返回) + 卷轴舞台 + 控制条 |
 | **视图 C DOM** | 413~448 | 观画：画框 + 占位图 + 热点层 + 侧栏 + `#bgm` |
+| **视图 D DOM（第 33 轮）** | ~654~715 | `#view-interact`：抬头 + 返回键 + 四标签页 + 四面板（`#itab-quiz`/`-color`/`-board`/`-extra`） |
+| **视图 D CSS（第 33 轮）** | ~412~540 | 整段 `#view-interact …`，选择器**一律带前缀**（与观画那套 `.p*` 互不借用）+ 窄屏媒体查询 |
 | `importmap` | 450~457 | Three.js 依赖源（**已改 unpkg**） |
 | `COLORS` | 470~511 | **8 色全量数据**（3D 与卷轴共用唯一一份） |
-| **`ASSETS` / `PLATES` / `UNITS`** | 516~572 | ★ **展陈文本与资源路径，喂料只改这里**（见 §7.6） |
-| 视图状态机 | 574~578 | `currentView`；三个顶层容器的引用 |
+| **`ASSETS` / `PLATES` / `UNITS`** | 516~572 | ★ **展陈文本与资源路径，喂料只改这里**（见 §7.6）。第 33 轮 `ASSETS.u4` 扩成 `{ note, closing }` |
+| **`EXTRA_COLORS` / `QUIZ` / 留言存储（第 33 轮）** | ~953~1055 | 补录七色 / 十道题 / `museum3d:notes:v1`（`strSeed` FNV-1a + `lsGetNotes`/`lsSetNotes`/`addNote`/`deleteNote`）—— 全是**数据**，改文案不用动逻辑 |
+| 视图状态机 | 574~578 | `currentView`（`museum`/`scroll`/`painting`/**`interact`**）；顶层容器引用 |
 | 博物馆建筑 | 600~708 | 地板/天花板/八边墙（**含南北门洞**）/八角屋顶/中央台 |
 | 灯光 | 696~710 | 半球光 + 主平行光 + 顶部点光 |
 | 展柜材质 | 710~765 | `GLASS_MAT`/`BRASS_MAT`/`WOOD_MAT` + `buildVitrine()`（**通用圆筒柜，现已无引用，留作备用**）；**第 21 轮**追加 `ENV_TEX`(748) / `CASE_GLASS`(750) / `ACRYLIC_MAT` / 平柜漆与呢料材质 —— 见 §7.8 |
@@ -184,24 +213,29 @@ museum-3d/                        ← 工作主目录（工作区 C:\Users\WANGS
 | 展台搭建 | 1060~1145 | 环形 8 展台 + **定制展柜（`cs.position.y = spec.plinth`）** + 悬停高亮环 + 拾取代理 |
 | `loadModel` | 1188~1230 | 加载 `.glb`：按 `spec` 归一化 + 摆正 + **按包围盒贴底**；失败降级占位 |
 | **展陈空间 1.5** | 1221~1730 | 五单元主体（见 §7.5） |
-| ├ 画布/贴图工具 | 1237~1315 | `canvasTex` / `wrapCJK` / `textBoardTex` / `bandTex` / `plate` |
-| ├ 展厅壳体 | 1319~1414 | `buildWallSide` / `buildRoom` / `buildPortal` / `buildStandBoard` |
+| ├ 画布/贴图工具 | 1237~1315 | `canvasTex` / `wrapCJK` / `textBoardTex`（**第 35 轮加 `body2`/`gap`**）/ `bandTex` / **`goldText`（第 35 轮，金字描边+投影）** / `plate` |
+| ├ 展厅壳体 | 1319~1414 | `buildWallSide` / `buildRoom` / `buildPortal`（**第 35 轮门柱金线 + 石青色条 + 门楣八色带 + 门枕石**，配 `portalBandTex()`）/ `buildStandBoard` |
+| **★ 地面动线贴花（第 35 轮）** | 室外段之后 | `ROUTE_Y`/`ROUTE_GOLD`/`routeDirDeg`/`routeArrowTex`/`routeArrowAt`/`routeArrowOn`/`routeDashSeg`/`RING_R`+`routeRing()`/`ROUTE_SEGS`。**贴地贴花一律 y=0.014**（箭头 0.021），**不许用 `plate()`**（它没有 transparent 标志） |
 | ├ `WALK` + `blockers` | 1416~1447 | ★ 可行走区域并集 + 圆形障碍（**必须建在展厅之前**，见 §7.5 坑 1） |
 | ├ 序厅 | 1449~1508 | 匾额、前言展板、导览图 |
 | ├ 内厅 | 1509~1578 | 画墙装裱、8 块低斜展牌、辅助展板、`paintHb` |
 | **★ 矿物展厅构件（第 21 轮）** | 1518~2000 | `mulberry32`/`speckMaps`/`specimenMat`/`roughRock`/`seatOnY0`/`liftToY0`/`dyePile`/`pigmentMound`/`oreMount`/`shallowDish`/`colorCard`/`mineralLabel`/`caseNameplate`/`specimenBay`/`buildTableCase`/`processTex`/`buildSpecimenWall`（见 §7.8） |
 | **★ 植物干料 + 工序台（第 22 轮）** | 1580~2100 | `DRIED_HEX`/`driedMat`/`budCluster`/`fruitPods`/`woodChips`/`bundle`/`silkSwatch`/`tint` + `benchLabel`/`mortar`/`washBasin`/`settleJars`/`bambooTray`/`processBench`（见 §7.8） |
-| ├ 第一单元 | 2460~2520 | **三段动线**：西墙原料标本墙（石色 / 水色两段）+ 北墙 4 座工序台与流程图 + 南墙 4 座成品矮展柜 |
+| **★ 原料／工序台点选（第 33 轮）** | ~2830~3000 | `RAW_STEPS`/`RAW_PICKS`/`rawRing`/`rawFrame`/`rawHit`/`showRaw` + `PRO_PICKS`/`proRing`/`proHit`/`showProcess`（见 §11 第 33 条） |
+| ├ 第一单元 | 2460~2520 | **三段动线**：西墙原料标本墙（石色 / 水色两段）+ 北墙 4 座工序台与流程图 + 南墙 4 座成品矮展柜。第 33 轮再加**三块导视牌** `zoneSign()`（壹原料／贰工艺／叁成品） |
+| **★ 第四单元（第 33 轮改）** | ~3860~4080 | 具名 `cardWallCanvas`/`drawCardWall()`（色卡墙，含补录七色带）+ 互动屏 + 具名 `boardWallCanvas`/`drawBoardWall()`（留言墙，真存真画）+ `INTERACT_HIT_TAB` 与三个 `kind:'interact'` 代理盒 |
 | ├ 第四单元 | 1610~1666 | 色卡墙 + 互动屏 + 留言墙 |
 | ├ 室外 | 1667~1690 | 地面 + 甬道 + 灯柱（含点光） |
 | └ 墙面画面 | 1691~1730 | `drawPaintWall` / `drawProWall` / `refreshWallArt` + 图片 load/error |
 | 导航/瞬移 | 1759~1788 | 顶部色点点击瞬移（视线高度取 `spec.gazeY`） |
-| 漫游控制 | 1790~1848 | PointerLock（`lock`/`unlock`）+ WASD + `showInfo` + `proximity` |
-| 点击拾取 | 1849~1883 | `pickAt`（返回 `userData`）/ `setHover` / canvas 事件 |
-| 主循环 | 1885~1917 | `animate()`：障碍推开 → 区域判定 → 沿墙滑动 |
+| 漫游控制 | 1790~1848 | PointerLock（`lock`/`unlock`）+ WASD + `showInfo` + `proximity`。**第 34 轮**：这一段末尾新增 `requestLock()` —— 所有进漫游的地方都走它（原 `controls.lock()` 丢掉 `requestPointerLock()` 的 Promise，被拒即 unhandled rejection） |
+| 点击拾取 | 1849~1883 | `pickAt`（返回 `userData`）/ `setHover` / canvas 事件。**第 33 轮**：`setHover` 加 `RAW_PICKS`/`PRO_PICKS` 可见性切换；`aimTextFor` 改查表 `AIM_WORD`；新增 `centerPick()`（漫游中心射线，`proximity` 不查 `hitboxes`，没它就点不动第一/第四单元）。**第 34 轮**：`mousedown` 处理器之后新增 `enterRoam()` + **F 键** + 顶栏 `#roam-btn` 两个入口（见 §11 第 34 条） |
+| 主循环 | 1885~1917 | `animate()`：障碍推开 → 区域判定 → 沿墙滑动 → **准星（第 33 轮：先看中心射线，再退回展台/画作/空地）** |
 | 卷轴构建 | 1919~2037 | 引首/8 色段/拖尾、色点、翻页、键盘 |
-| 视图切换 | 2038~2066 | `openScroll` / `backToMuseum` |
+| 视图切换 | 2038~2066 | `openScroll` / `backToMuseum`（第 33 轮起，四个切换函数都要顺带藏 `#view-interact`）。**第 34 轮**：`openScroll` 上方新增 `roamResume` + `grabRoam()`，「进全屏前在漫游 → 返回后仍在漫游」 |
 | **观画视图** | 2068~2186 | `openPainting` / `closePainting` / 色名条 / 热点 / `syncPaintFrame` |
+| **★ 视图 D · 互动（第 33 轮）** | ~4708~5090 | `switchTab`/`openInteract`/`closeInteract` + 四页（`buildQuiz`/`quizCheck`/`quizReset`、**`drawCard`/`hitRegion`/`exportCard`（第 35 轮换成山水填色，见下）**、`renderNotes`/`submitNote`、`renderExtra`）+ Escape 监听。**只用 `getElementById`+`createElement`+`textContent`** |
+| **★ 填色卡 = 八色山水（第 35 轮）** | ~5280~5470 | `DESIGN_W/DESIGN_H`（1600×1000 设计空间）+ 几何表 `FAR_TOP/WATER_TOP/PEAK/ROCKS/PINE/GROVE/MOON_POLY` + `INK_SKY/RIDGE/PEAK/WATER/ROCKS/GROVE/PINE/MOON` + `CARD_REGIONS`（8 区，每区 `{name, suggest, poly, lab, ink}`）+ `INK_DARK/INK_PALE`+`CUR_A/B/C`+`hexLum()` + `inkPath`/`fillPoly`/`pointInPoly`/`cardPointFromEvent` + `onCardMove`/`onCardClick`。**命中用射线法，绝不用 `Path2D`** |
 | **配乐** | 2188~2219 | `setBgm`、`#bgm-btn`、`#paint-audio`，缺文件自动置灰 |
 | 启动 | 2221~2229 | `setAnimationLoop(animate)` + resize |
 
@@ -374,7 +408,8 @@ const ASSETS = {
 
 ---
 
-## 7.7 一物一柜：第三单元 8 展台的定制柜型（2026-10-12 第 15 轮，第 19 轮加台座）
+## 7.7 一物一柜：八角主厅 8 展台的定制柜型（2026-10-12 第 15 轮，第 19 轮加台座）
+（本节标题原文为「第三单元」，按旧序号写的；2026-10-14 起八角主厅 = **第二单元**）
 
 **动因**：第 14 轮里 8 个展台共用一句 `buildVitrine(0.86, 2.34, 0.33)` 的圆筒玻璃罩。博物馆陈列的逻辑是
 **柜型服从器物** —— 长袍要立柜、盘要斜柜、帛书要平案、罐要方正独立柜。
@@ -903,6 +938,20 @@ node tools/cdp_shot.mjs http://127.0.0.1:8899/index.html out.png \
   展台 `halo`(0.02)/`pickRing`(0.03) 与地面 `floor`(0) 各差 2~3cm、
   台座下枋底面正好落在地面 y=0（与 `halo` 同处一带有 2cm 缝，不共面）。
 
+- **★ 贴地贴花：y 一律 `0.014`，而且别用 `plate()`**（2026-10-15 第 35 轮，地面动线箭头）。
+  两个坑一起记：
+  1. **高度**：各平面现有 y 值是 主厅地面 `0` / 房间地面 `0.004` / `floorRing` `0.01` /
+     甬道 `path` `0.01` / `halo` `0.02` / `pickRing` `0.03` / 室外 `ground` `-0.03`。
+     贴花的落点必须**同时高于最上面那块地面、又低于 `halo`**，所以取 **`0.014`**
+     （箭头再抬到 `0.021`，免得与虚线糊在一起）。10mm 在 20m 处远超深度精度，不会闪。
+  2. **`plate()` 画不了半透明贴花**：它是 `MeshBasicMaterial({map})`，**没有 `transparent` 标志**，
+     画布的 alpha 会被直接忽略（箭头会变成一块实心方纸）。第 35 轮为此另写了
+     `routeArrowAt` / `routeDashSeg`，显式 `transparent:true, depthWrite:false` + `renderOrder`。
+- **★ 给贴花定航向时，`rotation.order` 必须设成 `'YXZ'`**（第 35 轮）。
+  贴地要 `rotation.x = -π/2`；此时默认的 `'XYZ'` 组合出来是 `R = Rx·Ry`，偏航会被绕到
+  **贴花自身的横轴**上转过去 —— 南北向的长条会横过来。`'YXZ'` 是 `R = Ry·Rx`，
+  偏航最后施加，于是 `rotation.y = -Math.atan2(dz, dx)` 才是「在地面上转」。
+  配套约定：`deg` 0 = 北(−Z)，顺时针为正；`routeDirDeg = (dx, dz) => Math.atan2(dx, -dz)`。
 - **★ 加共享贴图的材质时，别用 `tex.clone()`**（2026-10-12 第 19 轮）。three r152+ 按
   `texture.source` 共享同一张 WebGL 贴图，而 `map`(sRGB) 与 `bumpMap`(NoColorSpace) 的
   `colorSpace` 不同，共用会互相覆盖内部格式（`wrapS`/`repeat` 这类采样参数更是谁后上传谁生效）。
@@ -920,6 +969,23 @@ node tools/cdp_shot.mjs http://127.0.0.1:8899/index.html out.png \
 
 ### 图片生成坑（ImageGen）
 - 并行多张时文件名取 prompt 前缀 + 秒级时间戳，同秒会互相覆盖 → **每个 prompt 开头加唯一标识（色名）**。
+
+### 3D 交互坑
+- **★ `controls.lock()` 会在控制台留 unhandled rejection**（2026-10-15 第 34 轮）。
+  three 的 `PointerLockControls.lock()` 里只有一句 `this.domElement.requestPointerLock();`，
+  **返回值被丢掉了**；而 Chrome/Edge 111+ 起该方法返回 Promise，被拒时（用户刚按过 ESC 的
+  冷却期、权限策略、无头/自动化环境）那条拒绝没人接 → 控制台多一条 unhandled rejection。
+  页面功能其实没事，但控制台脏了会带偏排查。**所有进漫游的地方统一走项目自己的 `requestLock()`**
+  （`index.html` 里 `controls` 的 lock/unlock 监听下方）。
+  ⚠️ 控件自带的 `pointerlockerror` 仍会打一行 `THREE.PointerLockControls: Unable to use Pointer Lock API`，
+  那是 three 打的，改不掉，也不代表页面出错。
+- **★ 无头 Chromium 里指针锁定根本锁不上**（同上）。浏览器自己报
+  `UnknownError: If you see this error we have a bug. Please report this bug to chromium.`。
+  所以「靠近展品 → 左键 → 进卷轴」这类**依赖真锁定的交互，无头截图/驱动测不了**。
+  可行的替代：临时把 `requestPointerLock`/`exitPointerLock` 换成「只翻 `controls.isLocked`
+  并派发 `lock`/`unlock` 事件」的替身，就能跑真实页面代码路径、断言状态机；
+  「某种手势有没有走到 `requestPointerLock`」则可以直接数调用次数（不依赖锁定是否成功）。
+  两种测法的脚本见 §11 第 34 条。
 
 ### 文物图下载坑
 - Wikimedia 被墙；故宫官网 `dpm.org.cn` 可达。用 Python urllib 抓藏品页 HTML，正则提取 `img.dpm.org.cn/Uploads/Picture/...` 下载，需带 UA 头。
@@ -955,8 +1021,9 @@ node tools/cdp_shot.mjs http://127.0.0.1:8899/index.html out.png \
 序厅（馆外甬道进入，前言展板 + 《月曼清游图》喷绘长墙 + 8 色色谱带 + 导览图）
 第一单元 色源·万物生（西侧辅厅，写实颜料展厅，按加工流程分三段：西墙=原料标本墙（石色/水色两段）
   → 北墙=工艺（4 座工序台 + 流程图 + 展词板）→ 南墙=成品 4 座地平矮展柜）
-第二单元 绘事·绢上观（北侧内厅，主展墙古画 + 8 块低斜色牌 + 全屏观画视图）
-第三单元 物色·入人间（八角主厅，原有 8 个展台，每个已罩透明玻璃展柜）
+第二单元 物色·入人间（八角主厅，原有 8 个展台，每个已罩透明玻璃展柜）
+第三单元 绘事·绢上观（北侧内厅，主展墙古画 + 8 块低斜色牌 + 全屏观画视图）
+  （⚠️ 2026-10-14 起绘事/物色的序号对调过，历史条目按旧序号写）
 第四单元 感知·互动（东侧辅厅，色卡墙 + 互动屏 + 留言墙）
 三视图切换：currentView ∈ 'museum' | 'scroll' | 'painting'。
 
@@ -1418,3 +1485,283 @@ node tools/cdp_shot.mjs http://127.0.0.1:8899/index.html out.png \
     - 📌 **没做的**：模型瘦身（用户选「先不动」）。真要动，两条路：贴图 1024²→512²（掉画质，但
       `tools/shrink_glb.py` 现成）、或 Draco/meshopt 几何压缩（画质几乎不掉、每件约 1.1MB→0.6MB，
       但要装 gltf-transform 且页面里加解码器，风险最大）。**关键路径是这 7.9 MB，不是配乐。**
+
+31. **卷轴「诗词注记」：诗句改竖排两列 + 字号跟卡高联动**（用户：「卷轴内有三个诗句汉字超过下限，把诗句放成两列」）
+    - 位置：CSS `#view-scroll .poem-wrap` / `.pt` / `.au`（`index.html:275` 起），模板在 `colorSeg()`
+      里那句 `<div class="poem-wrap">`；诗句所在的卡是 `.seg-mid`（`1.1fr 1fr 0.9fr`）三栏里**最窄的第三栏**。
+    - **改前实测**（无头 Edge，`.workbuddy/_check/poem.mjs`）：七个字一列 = 372px，可卡只有 311~393px ——
+      15 字的句子（段1 晴空一鹤排云上 / 段5 自在飞花轻似梦 / 段8 沾衣欲湿杏花雨）在
+      **1440×900 冒出卡 27.8px、1366×768 冒出 109.9px、1280×800 冒出 90px**；1366 下连 11 字的也冒 10.7px。
+      用户报的「三个」正是那三句七言。
+    - 改法两条：
+      ① `poemCols(txt)` 按「，」折成两列（七言 7+7、五言 5+5、四言 4+4，八句全是**上下句等长**，
+         所以两列等高、`align-items:center` 下天然齐平）。**逗号不渲染** —— 断列本身就是那个停顿，
+         挂在列尾会多出一字高、两列就不等高了。**顺序是上句在左、下句在右**（随页面统一的从左到右），
+         署名仍在最右不动；想改成传统右起左行（落款在最左），给 `.poem-wrap` 加 `flex-direction: row-reverse`。
+      ② `.poem-wrap` 声明 `container-type: size`，`.pt` 用 `font-size: min(20px, 10cqh)`（7 字 × 1.24 × 字号 ≤ 容器高），
+         `.au` 用 `max-height: 100cqh`（超了自动折成两列落款）。
+    - **为什么非要容器查询、不能只分列**：`1024×640`（小窗口）下这张卡只剩 **200px、可用高度仅 138px**，
+      而且真正的元凶是**署名**不是诗句 —— 段3 的「元 · 张可久《人月圆·山中书事》」17 字 = **228.8px**，
+      把整个 `.poem-wrap` 撑到比卡片还高（`flex: 1 1 0%` + `min-height: auto` 撑不下去），
+      诗句是被它拖着一起冒出下沿的。固定字号怎么调都救不了，只能让字号/署名跟着容器高度走。
+      1440/1366/1280 下容器够高，`min()` 仍封顶在 20px，**观感与改动前完全一致**；老浏览器不认识
+      `cqh` → 声明被忽略、退回 20px（即改动前的行为），不会更糟。
+    - **复核**（`.workbuddy/_check/poemall.mjs`，一次布局把 8 段量全，**不点色点**）：
+      `1440×900 / 1366×768 / 1280×720 / 1024×640` 四个视口**全部 0 段溢出**，两列顶端差 = 0；
+      1440/1366/1280 列高仍是 173.6px（20px 字号），与改动前逐字节一致。真机整屏截图另见 `fullshot.mjs`。
+    - ⚠️ **踩过的坑**：`poem.mjs` 是「点色点 → 等 320ms → 量」的写法，**量到的是假高度**
+      （卡 200px、wrap 228.8 这种自相矛盾的数字就是这么来的）；改用 `poemall.mjs` 一次布局量全才对。
+      截图同理：色点走 smooth 滚动 + `scroll-snap` 会**二次吸附**，拍早了就是隔壁那张卡（还试过
+      `captureBeyondViewport` + 内层滚动容器 → 拍到全黑）。`fullshot.mjs` 的解法是**等 rect 连续 4 次读数相同**再拍。
+    - 文档：`README.md` 长卷小节 + 版本戳。版本戳 `[b32-local]` → **`[b33-local]`**。
+
+32. **绘事 / 物色的单元序号对调（2026-10-14）**：
+    - 用户原话：「第二单元和第三单元的大厅铭牌交换位置」→ 经确认＝**只换编号文字、不动展厅展品**：
+      北侧内厅（古画）由「第二单元 · 绘事・绢上观」改**第三单元**；八角主厅（8 个展台）由
+      「第三单元 · 物色・入人间」改**第二单元**。
+    - 改的位置（**共 8 处文字 + 注释同步**）：
+      ① 两块大厅标题带 —— 都读 `UNITS.u2.cn` / `UNITS.u3.cn`（`index.html:654` 起），改这一处两条带子同时生效；
+         u2 带在内厅西墙 `(5.6,1.2,−6.35,3.4,−20,π/2)`（约 3031 行），u3 带在八角主厅东北对角面
+         `(5.6,1.2,12.90,3.4,−5.34,−1.1781)`（约 1307 行）—— **位置坐标一个没动**。
+      ② 观画视图全屏标题栏 —— 静态初值（467 行）+ 运行时 `paint-bar-title` 赋值（读 `UNITS.u2.cn`）；
+      ③ 古画点选信息卡的 `.obj` 行（`showInfo` 里 `PAINT_IDX` 分支）；
+      ④ 序厅「平面导览图」两格厅名：八角主厅改**第二单元**、内厅改**第三单元**（`guideTex`，约 2599/2600 行）；
+      ⑤ 序厅「剖面游览图」厅名小注 `cap[4]`/`cap[5]` 的 sub（④第二 · ⑤第三，约 2936/2937 行）；
+      ⑥ `README.md` 单元总览、参观路线树、展柜定制段。
+    - ⚠️ **副作用（已写进代码注释）**：`UNITS` 的**键名与序号不再对应** —— `u2` 键 = 第三单元 · 绘事、
+      `u3` 键 = 第二单元 · 物色。UNITS 上方留了 ⚠️ 说明，README 与本文件 §1 也各留一条，**别去"修"回来**。
+    - ⚠️ **没动的**：展厅、展品、动线、坐标、`blockers`、展牌数量、剖面游览图里各厅的**左右顺序**
+      （仍是 甬道 → 序厅 → 第一 → ④八角主厅 → ⑤内厅 → 第四，与真实动线一致；只换了厅名小注的文字）。
+    - **验证**：无头 Edge 实机跑通（8 件藏品加载完成、无 console 报错、整页正常渲染）；牌面文字是靠
+      `UNITS` 调用链核对的 —— 默认机位在馆外、仓库里**没有相机 hook**（早前会话的 `window.__hook` 已不在
+      `index.html` 里），两块厅内标题带**没做特写截图**，要拍得先临时加 hook 或走进去转视角。
+    - 版本戳 `[b33-local]` → **`[b34-local]`**。
+33. **移植「更新模块」分叉的第一 / 第四单元内容（2026-10-15）**：
+    - **来源**：用户手上另有一个 `更新模块/index.html`（标题戳 `[b29]`），在里面把**第一单元 · 色源・万物生**
+      与**第四单元 · 感知・互动**两厅做了大量新内容，要移植回本项目（原话「把其更新内容移植到我的主项目内」，
+      并限定「只需更新本项目第一单元和第四单元」）。
+    - 🔴 **首要注意：那个文件是本项目的一个旧基线分叉，不是超集，绝不能整文件覆盖。**
+      它**没有**本项目后来做完的这些：本地化 three.js（`assets/vendor/`）+ 启动看门狗、漫游准星 `#aim`、
+      卷轴诗句竖排折两列、序厅**落地双面**「平面导览图」+「剖面游览图」、程序化袍服 `buildGarment`/`fitRobe`、
+      内厅 8 块低斜展牌 + `PAINT_Y`、配乐按需下载，**而且它的 u2/u3 序号还是对调之前的**。
+      本轮**只挑两厅相关内容逐块移植**，其余一律不动。
+    - ⚠️ **轮次编号撞车**：分叉里的「第 23 / 24 / 26 / 28 / 29 轮」与本项目的轮次含义完全不同
+      （分叉的 23 = 原料点选、24 = 第四单元互动、26 = 留言墙、28 = 原料图、29 = 工序台点选）。
+      移植过来的注释**一律改写为「更新模块第 N 轮」**，避免与本项目轮次混淆。
+    - **第一单元（色源・万物生）**：
+      ① **数据**：`MINERALS` 每条补 `img`（`assets/raw/raw_<cid>.jpg`）与 `desc`（原料卡正文）；
+        `origin` 按用户 2026-10-14 文档改「主要产区」精简写法；苍黄 `form: 'rock' → 'oolitic'`；
+        `DRIED_HEX.chip` `#7a3a30 → #8a4a33`（苏木断面本色，不是泡水那层紫红）。
+      ② **形制**：新增 `ooliticChunk()`（钉头鲕状块，顶点按种子位移 + 「头大底收」+ 30 颗半嵌鲕粒，
+        自己坐正到 y=0）；`woodChips → heartwood`（5 段横卧短圆木 + 7 片劈开薄木片）；
+        `bundle → indigoLeaves`（4 根极短嫩茎 + 16 片压薄长卵叶）。三处的分派点同改。
+      ③ **可点选**（分叉第 23 / 29 轮）：新增 `RAW_STEPS`/`RAW_PICKS`/`rawRing`/`rawFrame`/`rawHit`/`showRaw`
+        与 `PRO_PICKS`/`proRing`/`proHit`/`showProcess`。挂点：原料墙 24 件（`色id@wallN`）、
+        成品柜内 8 个标本位（`色id@bayN`）、4 座工序台（`p1`…`p4`）—— **id 全部唯一**（见下「验证」）。
+      ④ **展签加内容**：`caseNameplate` canvas `1024×168 → 1024×230`，新增「由高至低　③ 原料 → ② 碎料 → ① 色粉」
+        「即：未加工 → 粉碎 → 水飞沉晾成粉」两行；`benchLabel` `520×200 → 520×280` 并新增古籍摘句 `quote`
+        与出处 `src` 两参数；`BENCH_ROW` 四条各补 `gear`/`desc`/`quote`/`src`，两条 `sub` 改写。
+      ⑤ **三块导视牌**：新增 `zoneSign(no, title, sub)`，壹／贰／叁 三块照分叉坐标放开，**不加 blocker**。
+    - **第四单元（感知・互动）**：
+      ① **数据**：新增 `EXTRA_COLORS`（补录七色）、`QUIZ`（十道题）、留言存储
+        （`museum3d:notes:v1` + `strSeed` FNV-1a + `lsGetNotes`/`lsSetNotes`/`addNote`/`deleteNote`，
+        **先判 `typeof localStorage === 'undefined'` 再 try/catch**）；`ASSETS.u4` 扩成 `{ note, closing }`。
+      ② **色卡墙**：由一次性 `plate(canvasTex(…))` 改成**具名 canvas + `CanvasTexture` + `drawCardWall()`**，
+        `1600×620 → 2000×775`，上半八色 + 下半补录七色带。
+      ③ **留言墙**：同样改具名 canvas + `drawBoardWall()`，`1400×700 → 1680×1000`，
+        plate 由 `3.4×1.7 @ y1.8` 放大到 **`4.20×2.50 @ y2.05`**；`mixHex()` 把纸色往墙色兑（越旧越灰）、
+        按 `strSeed(id)` 派生的随机序列「挑最空的一处」落点、按新旧分大小/浓淡/投影 + 左下留款 + 右下朱印。
+        **无一处 `Math.random()`** —— 同一批留言每次都是同一面墙。
+      ④ **三块可点代理盒**：`INTERACT_HIT_TAB = { cards:'extra', screen:'quiz', board:'board' }` +
+        三个不可见 Box（`kind:'interact'`）。色卡墙那个**只罩下半补录带**，不挡上面 8 主色。
+      ⑤ **新的全屏「视图 D · 互动」**：`<div id="view-interact">`，四页（八色答题 / 填色卡 / 留言板 / 续色结语）。
+        分叉原来叫「视图 D」，在本项目里它是在 `scroll` / `painting` 之后的**第四个**视图。
+        本段**只用 `getElementById` + `createElement` + `textContent`**，不用 `querySelector` / `innerHTML`
+        （留言内容原样测试过 `<b>` 注入 —— 渲染成 `&lt;b&gt;`，不产生元素）；填色卡命中测试用
+        **纯角度/半径几何**，不用 `Path2D` / `isPointInPath`。
+    - 🔴 **本项目独有、分叉没有的机制：漫游（指针锁定）下的中心射线。**
+      `proximity()` 只认主厅 8 座展台的距离与画作半径，**完全不查 `hitboxes`** ——
+      第一单元与第四单元里没有任何 `exhibits`，所以漫游时 `currentIdx` **恒为 `-1`**，准星只会显示
+      「点空地 · 退出漫游」。要让三族新对象在漫游里点得动，**必须新加一条射线**：
+      新增 `centerPick()`（`pickAt(innerWidth/2, innerHeight/2)`），在 `animate()` 的
+      `if (controls.isLocked)` 块里**每帧调一次**（`hitboxes` 本轮 10 → **56** 个，量小、可接受，
+      **别写成每帧多次或放进循环**）；`aimTextFor` 扩成查表 `AIM_WORD`；
+      `mousedown`（漫游左键）与 `canvas` 的 `click`（自由视角）两条通路都补 `raw`/`process`/`interact`
+      三条路由，**必须插在既有 `currentIdx` 判定之前**（否则站在原料墙前时 `currentIdx=-1`，
+      这一击会被吃掉变成「退出漫游」）。顺带把分叉在点空地分支里多做的
+      `info.classList.remove('show')` + `currentIdx = -1` 一并移植 ——
+      否则「点开原料卡 → 进漫游 → 走到没展台的地方」卡片会赖着不收。
+    - **视图状态机**：`currentView` 增加 `'interact'`；`interactViewEl` 取在 `view-museum` / `view-scroll`
+      那几行旁边（**不能**等在 4.5 段里取 —— 4.5 段在文件末尾，而 `openScroll`/`backToMuseum`/
+      `openPainting`/`closePainting` 都在它前面定义，函数体里引用靠 `const` 的 TDZ 兜不住）；
+      这四个切换函数**四处都要补 `interactViewEl.classList.add('hidden')`**，漏一处就两个视图叠着显示。
+      本项目此前**一个 Escape 处理器都没有**（有意的），本轮**只给互动区补这一条**，
+      别顺手给观画态也加（那是范围外、会改掉既有手感）。
+      `#hint` 补一句第四单元三块板可点，**保留了原有的「点击空地漫游」说法**（分叉版没有这句）。
+    - ⚠️ **本轮踩到 / 避开的坑**：
+      - 🔴 **`BOARD_Y0` 重名 → 白屏**：分叉的留言墙布局常量 `BOARD_X0` / `BOARD_Y0` 与本文件
+        内厅低斜展牌的 `const BOARD_Y0 = 0.43`（板面下沿高度）**撞名**。模块顶层重名声明 = 整页白。
+        已把留言墙那对改名 **`NOTE_X0` / `NOTE_Y0`**（与同族的 `NOTE_HW`/`NOTE_HH` 归并）。
+        这是 `node --check` 抓出来的 —— **单文件 module 的白屏类错误，语法体检就能拦掉一大半**。
+      - ⚠️ **`interactViewEl` 的 TDZ**：见上「视图状态机」。
+      - ⚠️ **注释里的轮次**：全部改写成「更新模块第 N 轮」，别让接手的人以为是本项目的轮次。
+    - ✅ **验证（本轮真跑过，不是推断）**：
+      - `node --check`（模块抠成 `.mjs`）**通过**，另加一遍前置 `"use strict";` 再 check 一次通过；
+        顶层重名扫描「无」。
+      - **无头 Edge + CDP 真渲染**（`tools/serve.py` 8899 + `tools/cdp_shot.mjs`，
+        机位用临时注入到**最后一个 `</script>` 之前**的 `window.__hook.look()` 摆）：
+        模块跑到底（钩子在模块尾部打印 `HOOK-R33`）、`window.__errs` 为空、全程零 `Runtime.exceptionThrown`。
+      - **hitbox 唯一性（本轮的老大难）**：`hitboxes` **56 个，唯一 id 56，重复 0**；
+        分族 `{ stand:8, paint:1, plate:8, raw:32, process:4, interact:3 }`。
+        `RAW_PICKS` 32、`PRO_PICKS` 4。**`blockers` 45 个、`blockers.push` 4 处，与改前逐字相同**（本轮没加任何障碍）。
+      - **点选**：中心射线分别命中 `dailan@wall10`（西墙原料）、`canghuang@bay2`（柜内）、
+        `p2`/`p4`（工序台）、`screen`/`board`/`cards`（互动区三块）—— 全部返回正确的 `kind` + 唯一 `id`；
+        **色卡墙 8 主色上半射线为空**（代理盒只罩下半补录带，符合设计）。
+      - **卡片**：`showRaw('shiqing')` 出原料卡、图 `1400×1400` 正常解码、图注「原料图 · AIGC 生成」；
+        **缺图路径**（临时把 `img` 指向不存在的文件）2.5 秒内整块 `.rawimg` 被移除，**不留白框、不报错**。
+        `showProcess(3)` 出工序卡。
+      - **互动区四页**：答题 10 题可交卷给分并出解析、`<b>` 注入被转义、`maxlength` 40/8；
+        填色卡 8 个色块可上色、导出 PNG 实测 `3600×2480`（= `CARD_W*2 × CARD_H*2`）；
+        留言写入 → `localStorage` 落库 → 列表刷新 → **转身回展厅墙上出现那张便签** → 删除后同步消失；
+        四页文案来自 `EXTRA_COLORS` / `QUIZ` / `ASSETS.u4`（结语 7 行补录色、10 题、4 标签）。
+      - **视图互斥**：进卷轴 / 回展厅 / 进观画 / 开互动区再进卷轴 / 开互动区再进观画，
+        每一种状态**恰好只有一个视图可见**；从互动区按 Esc 能回展厅，再按一次无异常。
+      - **回归**：主厅 8 座展台（含袍类真模型与悬停环）、内厅画心 + 8 块低斜展牌、序厅落地双面「平面导览图」+
+        「剖面游览图」、两个 `<audio>` 仍 `preload="none"` 且 `src` 为空（**按需下载未破**）—— 全部照旧。
+      - 截图留档在 `.tmp-check/shots/`（**体检临时目录，收尾已删**）。
+    - **资源**：新增 `assets/raw/`（八张 `raw_<cid>.jpg`，1400×1400 / q88，共 2.53MB）
+      + `assets/raw/README.txt`（记来料、**切**水印的经过、哪张配哪个色）。
+      这八张是 **AI 生成的示意图**（原料卡图注已标「AIGC 生成」），**别与 `assets/artifact/` 的文物实拍混用**。
+      换图直接覆盖同名文件即可，删掉某行的 `img` 字段或文件缺失时原料卡会自动不显示那一块。
+    - 版本戳 `[b34-local]` → **`[b35-local]`**。
+
+34. **修「贴着互动屏 / 画心就再也进不去漫游」的死角**（2026-10-15 第 34 轮，用户报障）
+    - **症状**：在漫游里走近第四单元互动屏（第三单元画心同理），左键进互动区 / 观画；
+      按「返回展厅」或 Esc 回来后，人 **鼻尖仍顶着那块板**、且已回到自由视角 ——
+      满屏都是可点对象，点哪儿都又进全屏，**永远走不到 `controls.lock()`**，看着就是卡死。
+    - **病根**：进漫游的入口只有「点空地」一条，而它依赖**射线什么都没打中**；
+      偏偏「贴着板」正是参观者最容易待的位置（他就是这么走近去点开它的）。
+      入口与「看什么」耦合在同一个手势上，必然存在「无空地可点」的态。
+    - **三处改动**（都在 `index.html`，展厅内容与坐标一字未动）：
+      1. **`roamResume` + `grabRoam()`**（`openScroll` 上方 ~4622~4640）：
+         `openScroll` / `openPainting` / `openInteract` 在 `unlock()` **之前**记一笔
+         `roamResume = controls.isLocked`；`backToMuseum` / `closePainting` / `closeInteract`
+         末尾调 `grabRoam()` 把漫游还回去。**进全屏前在漫游 → 返回后仍在漫游**，
+         闭环自解：回来就能 W 走开、点空地解锁，与「漫游中左键直达」同一套手感。
+         ⚠️ 必须是 unlock **之前**的 `isLocked`，unlock 之后就读不到了。
+         ⚠️ 从自由视角点进去的（`roamResume=false`）**不能**顺手锁上 —— 已单测覆盖。
+      2. **`enterRoam()` 一个函数、两个入口**（mousedown 处理器下方 ~4420~4436）：
+         **F 键** + 顶栏新增的 **「进入漫游」按钮**（`#roam-btn`，锁定时由 `lock`/`unlock`
+         事件加 `.hide` 隐去 —— 锁定后指针被浏览器收走，留着只会误导）。
+         两者都与射线命中、与距离无关，所以「贴着板」也进得去。
+         选 F 的理由：W/A/S/D 是移动、空格会触发按钮、Enter 会被按钮吃掉；F 与
+         「浏览器固有的 ESC 退出漫游」正好配成一对。`e.ctrlKey/metaKey/altKey` 与
+         `INPUT/TEXTAREA` 两条守卫都在（别抢 Ctrl+F、别在留言板打字时触发）。
+      3. **`requestLock()` 包装**（`controls` 的 lock/unlock 监听下方 ~4207~4222）：
+         原代码直接用 `controls.lock()`，而它**把 `requestPointerLock()` 的返回值丢掉了** ——
+         Chrome/Edge 111+ 起该方法返回 Promise，被拒时（刚按过 ESC 的冷却期、权限策略、
+         无头环境）就是一条 **unhandled rejection 落进控制台**。三处进漫游（canvas 点空地 /
+         `enterRoam` / `grabRoam`）现在统一走 `requestLock()`，自己接住那条拒绝。
+         ⚠️ three 自带的 `pointerlockerror` 仍会打一行 "Unable to use Pointer Lock API"，
+         那是库打的，改不掉，不代表页面出错。
+    - **`#hint` 文案**：`点击空地漫游` → `点击空地或按 F 漫游`（保留原有「左键点空地退出漫游」的说法，未丢）。
+    - **体检**（`tools/serve.py` 8899 + 无头 Edge + CDP，注入到最后一个 `</script>` 之前的 `window.__hook`）：
+      - `node --check` 通过，再前置 `"use strict";` 一次仍通过。
+      - **逻辑套件 33 项全绿**（`.tmp-check/drive34.mjs`）：`blockers` 仍 **45**、
+        `hitboxes` 仍 **56 个 / 唯一 id 56 / 重复 0**、`byKind` 与上轮逐字相同；
+        F 键进漫游 ✓、锁定时按钮隐去 ✓、已锁定再按 F 为空操作 ✓、Ctrl+F 不抢 ✓；
+        **★ 用户报的那条路径**：漫游→贴互动屏（中心射线命中 `interact:screen`、准星「进入互动区」）
+        →派发真 `mousedown`→`view=interact` 且 `resume=true`→**返回后 `locked=true`** ✓，
+        回漫游后按 W 一秒实测前进 4.44m ✓；观画、卷轴两条返回路径同样 `locked=true` ✓；
+        自由视角进出的三条路径 `resume=false`、返回后 `locked=false`（**没有多此一举地锁上**）✓；
+        `window.__errs` 为空、零 `Runtime.exceptionThrown`。
+      - **真手势路由**（`drive34b.mjs`，走 CDP `Input.*`、不经任何替身）：点顶栏按钮 / 按 F /
+        点画面空地 **各发起 `requestPointerLock` 1 次**，Ctrl+F **0 次** —— 路由正确。
+        ⚠️ **无头 Chromium 的指针锁定本身是坏的**（浏览器自己报
+        "Please report this bug to chromium"），所以「真的锁没锁上」这一步无头测不了；
+        上面的 `locked` 断言是用替身（`fakeLock()` 只翻 `isLocked` 并派发 `lock`/`unlock` 事件）
+        跑真实页面代码路径得到的。
+      - **`requestLock()` 的前后对照**是这次测试的意外收获：改造前 3 次尝试 → 控制台 **3 条**
+        `unhandledrejection`；改造后 4 次尝试 → `__errs` **为 `[]`**。
+    - 截图留档在 `.tmp-check/shots/`（**体检临时目录，收尾已删**）。
+    - 版本戳 `[b35-local]` → **`[b36-local]`**。
+
+35. **落实《更新模块/润色意见.txt》五条**（2026-10-15 第 35 轮）：地面动线箭头 / 单元序号改单字 /
+    门框修饰与「白方块」/ 填色卡换山水 / 字体与文字润色。**展厅几何一个 blocker、一处 WALK、
+    一个 hitbox 都没动**（改完实测 `blockers` 仍 45、`WALK` 仍 11、`exhibits` 仍 8）。
+    - **① 地面动线箭头**（新增，室外段之后）：`ROUTE_Y = 0.014`、箭头 `0.021`；
+      `routeDashSeg()` 铺 0.44m 宽的金色虚线（图案 1.6m 一循环，`RepeatWrapping` + `repeat.x = len/1.6`），
+      `routeArrowAt/On()` 在转角、汇合、环线上放「纸色圆托 + 金箭头」；
+      八角主厅的 `routeRing()` 用 **24 段 `RingGeometry` 圆弧**（半径 `RING_R = 7.6`，
+      每段占 60% 弧长）拼成虚线圆，8 支切向箭头逆时针。`ROUTE_SEGS` 是 9 段直线动线表。
+      **半径为什么是 7.6**：8 座展台在 r=10.6 上按 45° 均布，i=2/6 正好落在 (0,±10.6)，
+      沿 x=0 直穿会撞展台（blocker 1.7）；7.6 离中央信息台（1.9）与展台都够远。
+      主轴停在 z=12.9（展台阻挡半径止于 12.3），壹区南端 z=22.9（矮展柜止于 23.16）。
+      ⚠️ 三个坑都写进 §8 了：**y=0.014 的由来**、**`plate()` 画不了半透明**、
+      **`rotation.order` 必须是 `'YXZ'`**。
+    - **② 单元序号改单字（全站）**：`UNITS` 四个 `cn` 改 `壹 · 色源・万物生` / `贰 · 物色・入人间` /
+      `叁 · 绘事・绢上观` / `肆 · 感知・互动`；平面导览图四个 `box()` 标签 → `壹 · 色源`…，
+      并给 `box()` 加了**量宽自适应缩号**（21px 起降、下限 15px —— 「肆 · 感知」那个框只有 101px，
+      原来会压到框线）；剖面游览图 `cap[].sub` → `壹 · SOURCES`…；数据体与 DOM 文案里的
+      「第一/四单元」→「壹区/肆区」（正文里裸字读不通，所以提法统一用「壹区」）。
+      **顺带删掉 `UNITS.prologue`**（全文件无引用的死数据）。
+      壹区里那三块导视牌同时从「壹/贰/叁 原料/工艺/成品」改成 **甲/乙/丙**（同一厅里两个「壹」会打架）。
+      ⚠️ `u2` = 叁（内厅）、`u3` = 贰（主厅）—— 序号 2026-10-14 对调过，**键名 ≠ 序号**。
+    - **③ 门框修饰 + 「白方块」**（两处都在这条里说清）：
+      · **门套**：`buildPortal` 追加**门柱金线（`#a8853f`）+ 内侧石青色条（`#1E3C72`）+
+        门楣下沿一条八色色带（`portalBandTex()`，色块取自 `COLORS[].hex`，与色卡墙同款语言）+
+        两柱脚的门枕石**；前后两面各铺一套（背面 `rotation.y = π` 翻过来才看得见），
+        门枕石只造一次（放进双面循环会重影）。**全是装饰件，不加 blocker、不加 hitbox**
+        （射线只打 `hitboxes` 数组，装饰网格天然惰性）。
+      · **「白方块」= 序厅北墙那块裸的剖面游览图**：`plate(sectionTex, 3.40, 1.159, …, 14.15)`
+        纸色 `#efe6d2`、光板一块没有边框，从甬道看过去就是「贴在灰墙上的一个白方块」。
+        照平面导览图的做法补了**深木色背板（3.72×1.44×0.06，z=14.115）+ 四条黄铜线脚**，
+        画心前移到 z=14.158。
+    - **④ 填色卡换「八色山水」**（原来是对着几何常数画的八色团扇）。**这一条偏离了原话** ——
+      用户说「分色线稿你在网上找一个简易山水画」，实测那条路走不通：Commons 的 curl 20s 超时、
+      WebFetch 返回「无法验证域名」（且它只回文字、拿不到图片字节），古籍扫描单页 2~5MB 按
+      Pages 实测 35KB/s 要让访客等一两分钟 —— 与「资源必须压体积」的项目规矩相冲。
+      **改成 canvas 程序化画一幅芥子园味的简易山水**：零依赖、可离线、体积为 0，
+      且 8 个可填区与墨线严丝合缝（下载来的画做不到）。`assets/card/shan-shui-lines.png`
+      留作换图槽位（真有图了，按图重描 8 条 `poly` 即可，其余代码不动）。
+      · 设计空间 **1600×1000**，`drawCard` 用一次 `setTransform` 整体缩放 ——
+        屏幕（1×）与导出（2×）走同一份代码、同一套坐标，所见即所得。
+      · 8 区 ↔ 八色：天 月白｜月 藕合｜远山 黛蓝｜主峰 石青｜坡石 苍黄｜江水 霁蓝｜松 松花｜秋林 杏黄。
+      · **墨线与填色交替、按「远→近」同一个顺序走**（铺色(i)→画线(i)→铺色(i−1)→画线(i−1)…），
+        近处的填色天然盖掉远处的线（远山的脊线不会穿进主峰、水纹不会压在坡石上），
+        不用去跟 `ctx.clip` 的奇偶填充较劲。`CARD_REGIONS` 的**顺序一身三职**：
+        命中优先级 / 填充顺序（逆序铺）/ 墨线层序（正序画）—— 动它之前三件事都要想到。
+      · **底色深的那一层自动换浅墨**（`hexLum(f) < 118` → `INK_PALE`）：霁蓝 / 石青 / 黛蓝
+        这几个底色上深墨根本看不见，等于把线稿吃掉。墨线函数一律读 `CUR_A/B/C`，不写死深墨。
+      · 命中测试用**射线法点在多边形内**（`pointInPoly`），**继续不用 `Path2D`/`isPointInPath`**
+        （模块顶层一引用 `Path2D` 就是 ReferenceError → 整页白屏，这是铁律）。
+      · 掠过部位报「部位名 ＋ 宜什么色」；未填区在画上写淡墨部位名，填了就撤。
+        ⚠️ `buildCard()` 每次切到 ② 页都会被调一遍，**mousemove 监听不能挂在它里面**（会越叠越多），
+        得挂在模块底部那个一次性监听块里。
+    - **⑤ 字体与文字润色**：
+      · **3D 金字加描边 + 投影**：新增 `goldText(ctx, text, x, y, opt)`（先 `strokeText` 带
+        `shadowBlur`，再把 `shadowBlur` 归零后 `fillText` —— 填充那一下不投影，免得糊成双影）。
+        用在 门楣匾额、`zoneSign` 序号、`bandTex` 单元标题带三处。
+        ⚠️ 必须在**紧邻 `fillText` 的前面**设 `lineWidth/strokeStyle`，不能靠状态留存
+        （后面的 `strokeRect` 会把它们覆盖掉）。
+      · **长文展板提高可读性**：`textBoardTex` 行高 1.85 → **2.05**，空行只走六成。
+        ★ 顺带抓到一个**既有缺陷**：壹区展词板（色从哪里来）画布 1400×800 **装不下 15 行**，
+        末尾「展柜分……三层并列」与「全厅用 3000–4000K……」**两行一直是被裁掉的**
+        （基线截图 `base_u1note.png` 坐实）。行高放大后更装不下 → 画布抬到 1400×1000、
+        板面 4.2×2.4 → 4.2×3.0、板心 y 1.75 → 1.90。**别再改回 800。**
+      · **前言补「为什么是这八色」**：`textBoardTex` 加可选 `body2` / `body2Size` / `gap`
+        （正文后画一条细分隔线再排第二段），`ASSETS.foreword.body2` 用 `润色意见.txt` 末尾原文，
+        板面 2.50×1.61 → **2.50×3.03**、板心 y 1.22 → **2.00**（跨度 0.49~3.51，
+        底座 `fgBase` 顶面 0.42，板底正好压上去；沿 z 仍占 15.35~17.85，与西墙门洞错开）。
+    - **体检**：`node --check` 普通 + `"use strict";` 各一次通过；
+      `tools/serve.py 8899` + 无头 Edge + CDP（`.workbuddy/_check/r35.mjs` 13 个机位、
+      `card37.mjs` 填色卡专测）—— 两项都 **`Runtime.exceptionThrown` 0 条**、`window.__errs` 为空；
+      `blockers` **45**、`WALKn` **11**、`exhibits` **8**（与改前逐字相同）。
+      填色卡专测覆盖：空卡 → 掠过 8 个部位（提示逐条对）→ 分色乱填（含反复改色覆盖）→
+      8 区全中（`filled: 8`）→ 走 2× 导出路径取回缩略图 → 清空回归 0。
+      ⚠️ 复核出来的一个**测试脚本**坑（不是页面坑）：`Runtime.evaluate` 里读不到模块作用域的
+      `CARD_W` 等常量，得走 `window.__hook` 里注入的函数。
+    - **文档**：`README.md` 把「② 填色卡 —— 八色团扇」改成山水填色、参观路线补一句地面箭头、
+      前言展板补「交代了选色理由」、单元提法统一成 壹/贰/叁/肆 + 壹区/肆区；
+      `HANDOFF.md` §6 导航表补 3 行、§8 补两条渲染坑。
+    - 版本戳 `[b36-local]` → **`[b37-local]`**。
